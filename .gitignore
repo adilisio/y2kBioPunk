@@ -1,0 +1,56 @@
+# ==============================================================================
+# Godot 4 & GDExtension Git Ignore
+# Project: Y2K Bio-Punk ARPG
+# ==============================================================================
+
+# Godot 4.x runtime & editor cache (never commit .godot/ cache)
+.godot/
+*.translation
+
+# Standalone Godot engine executables & tools
+*.exe
+Godot_v4.3-stable_win64.exe
+
+# SCons build cache
+.sconsign.dblite
+.sconf_temp/
+
+# C / C++ compiler object files and intermediate build artifacts
+*.obj
+*.ilk
+*.pdb
+*.exp
+*.lib
+*.TMP
+*.tmp
+~*
+
+# Retain prebuilt GDExtension dynamic libraries for immediate playability
+!bin/*.dll
+!bin/*.so
+!bin/*.dylib
+
+# Exclude non-shared library build artifacts from bin
+bin/*.exp
+bin/*.lib
+bin/*.pdb
+bin/*.ilk
+bin/*.tmp
+bin/*.TMP
+bin/~*
+
+# Temporary test logs and outputs
+test_output.txt
+*.log
+
+# Visual Studio & IDE metadata
+.vs/
+*.sln
+*.vcxproj*
+.idea/
+.vscode/
+
+# Operating system artifacts
+.DS_Store
+Thumbs.db
+desktop.ini

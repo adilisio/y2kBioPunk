@@ -13,6 +13,10 @@
 #include <godot_cpp/classes/gpu_particles3d.hpp>
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_map.hpp>
+#include <godot_cpp/classes/physics_direct_space_state3d.hpp>
+#include <godot_cpp/classes/physics_shape_query_parameters3d.hpp>
+#include <godot_cpp/classes/world3d.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
@@ -203,6 +207,7 @@ void PlayerController::_ready() {
 		attack_sensor->add_child(atk_col);
 		add_child(attack_sensor);
 	}
+	attack_sensor->set_collision_mask(attack_sensor->get_collision_mask() & ~1u);
 	attack_sensor->set_position(facing_direction * 1.2f + Vector3(0.0f, 0.5f, 0.0f));
 
 	recalculate_derived_stats();
@@ -617,44 +622,23 @@ void PlayerController::_physics_process(double p_delta) {
 		return;
 	}
 
-	// Update attack cooldown timer & reset is_attacking state
-	if (is_attacking || current_state == STATE_ATTACKING) {
+	if (is_attacking) {
 		attack_timer -= delta_f;
-
-		bool anim_finished = false;
-		if (anim_player) {
-			double anim_len = anim_player->get_current_animation_length();
-			double anim_pos = anim_player->get_current_animation_position();
-			if (anim_len > 0.05 && anim_pos >= anim_len - 0.02) {
-				anim_finished = true;
+		if (pending_hit_timer >= 0.0f) {
+			pending_hit_timer -= delta_f;
+			if (pending_hit_timer <= 0.0f) {
+				pending_hit_timer = -1.0f;
+				execute_bat_attack();
 			}
 		}
-
-		if (attack_timer <= 0.0f || anim_finished) {
-			attack_timer = 0.0f;
-			is_attacking = false;
-			current_state = STATE_NORMAL;
-
-			// When resetting the state, check if moving -> "Running" (if skates) or "Walking", otherwise play "restpose"
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-				if (!anim_player) {
-					anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-				}
-			}
-			if (anim_player) {
-				float exit_speed = 1.0f;
-				anim_player->set_speed_scale(exit_speed);
-				if (get_velocity().length() > 0.0001f) {
-					String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
-					anim_player->play(anim_to_play);
-				} else {
-					anim_player->play("restpose");
-				}
+		if (attack_timer <= 0.0f) {
+			if (combo_buffered && combo_hit < 3) {
+				start_combo_hit(combo_hit + 1);
+			} else {
+				is_attacking = false;
+				current_state = is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE;
 			}
 		}
-	} else if (attack_timer > 0.0f) {
-		attack_timer -= delta_f;
 	}
 
 	// Check if input actions were just pressed
@@ -699,7 +683,7 @@ void PlayerController::_physics_process(double p_delta) {
 		if (!is_attack_just_pressed && input_map && input_map->has_action("bat_swing")) {
 			is_attack_just_pressed = input->is_action_just_pressed("bat_swing");
 		}
-		if (is_attack_just_pressed && !is_attacking) {
+		if (is_attack_just_pressed) {
 			attack();
 		}
 	}
@@ -755,7 +739,7 @@ void PlayerController::_physics_process(double p_delta) {
 		}
 	}
 
-	float speed = get_movement_speed();
+	float speed = get_movement_speed() * (is_attacking ? 0.25f : 1.0f);
 	Vector3 hv(current_velocity.x, 0, current_velocity.z);
 	bool skating = is_skating || is_equipped_skates;
 	bool has_input = move_direction.length_squared() > 0.0001f;
@@ -779,6 +763,10 @@ void PlayerController::_physics_process(double p_delta) {
 		float turn = Math::deg_to_rad(turn_rate) * delta_f;
 		direction = direction.rotated(Vector3(0, 1, 0), Math::clamp(angle, -turn, turn));
 		hv = direction * Math::move_toward(h_speed, speed, 16.0f * delta_f);
+	}
+	if (lunge_timer > 0.0f) {
+		lunge_timer -= delta_f;
+		hv += facing_direction * 4.0f;
 	}
 	current_velocity.x = hv.x;
 	current_velocity.z = hv.z;
@@ -899,6 +887,10 @@ void PlayerController::process_animation() {
 }
 
 void PlayerController::_process(double p_delta) {
+	if (hit_stop_end_msec != 0 && Time::get_singleton()->get_ticks_msec() >= hit_stop_end_msec) {
+		Engine::get_singleton()->set_time_scale(previous_time_scale);
+		hit_stop_end_msec = 0;
+	}
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
 	}
@@ -1135,181 +1127,113 @@ bool PlayerController::orient_towards_cursor() {
 }
 
 void PlayerController::attack() {
-	if (current_state == STATE_DEAD || attack_timer > 0.0f || is_movement_locked || is_attacking) {
+	// Melee cannot interrupt an evade; its exit always owns i-frame cleanup.
+	if (current_state == STATE_DEAD || current_state == STATE_EVADING || current_state == STATE_GRINDING || is_movement_locked) {
+		return;
+	}
+	if (is_attacking) {
+		if (attack_timer <= 0.15f && combo_hit < 3) {
+			combo_buffered = true;
+		}
 		return;
 	}
 	orient_towards_cursor();
-	is_attacking = true;
 	current_state = STATE_ATTACKING;
+	start_combo_hit(1);
+}
 
-	if (!anim_player) {
-		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-		if (!anim_player) {
-			anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-		}
-		if (!anim_player && visuals) {
-			anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer", true, false));
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer2", true, false));
-			}
-		}
-	}
-	float duration = 2.3f / 2.0f;
-	if (anim_player) {
+void PlayerController::start_combo_hit(int p_hit) {
+	combo_hit = p_hit;
+	combo_buffered = false;
+	is_attacking = true;
+	attack_timer = 0.29f;
+	pending_hit_timer = p_hit == 2 ? 0.06f : 0.10f;
+	lunge_timer = 0.08f;
+	if (anim_player && anim_player->has_animation("Punch_Combo_1")) {
 		anim_player->set_speed_scale(2.4f);
-		if (anim_player->has_animation("Punch_Combo_1")) {
-			anim_player->play("Punch_Combo_1");
-		} else if (anim_player->has_animation("Attack")) {
-			anim_player->play("Attack");
-		} else {
-			anim_player->play("Punch_Combo_1");
-		}
-		double anim_len = anim_player->get_current_animation_length();
-		if (anim_len > 0.05) {
-			duration = static_cast<float>(anim_len / 2.0);
-		}
+		anim_player->play("Punch_Combo_1");
+		anim_player->seek(p_hit == 1 ? 0.45 : (p_hit == 2 ? 0.80 : 1.15), true);
 	}
-	attack_timer = duration;
-
-	execute_bat_attack();
 }
 
 void PlayerController::execute_bat_attack() {
 	orient_towards_cursor();
-
-	// Damage scales with Strength stat
-	float damage = base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f;
-
-	UtilityFunctions::print("[Y2K-COMBAT] *SWING-CRACK!* Swung Baseball Bat! Effective STR: ", get_effective_strength(), " -> Dealing ", damage, " damage.");
-
-	if (!attack_sensor) {
-		attack_sensor = Object::cast_to<Area3D>(find_child("AttackSensor", false, false));
-		if (!attack_sensor) {
-			attack_sensor = Object::cast_to<Area3D>(find_child("WeaponHitbox", false, false));
-		}
-	}
-
-	Array hit_targets;
-
-	// 1. Strict spatial collision query using weapon Area3D / attack sensor
-	if (attack_sensor) {
-		attack_sensor->set_position(facing_direction * 1.2f + Vector3(0.0f, 0.5f, 0.0f));
-
-		// Query physically overlapping bodies (e.g. CharacterBody3D enemies like NeonCicada)
-		TypedArray<Node3D> overlapping_bodies = attack_sensor->get_overlapping_bodies();
-		for (int i = 0; i < overlapping_bodies.size(); i++) {
-			Node3D *body = Object::cast_to<Node3D>(overlapping_bodies[i]);
-			if (body && body != this) {
-				hit_targets.append(body);
-			}
-		}
-
-		// Query physically overlapping areas (e.g. Hurtbox on enemy scenes)
-		TypedArray<Area3D> overlapping_areas = attack_sensor->get_overlapping_areas();
-		for (int i = 0; i < overlapping_areas.size(); i++) {
-			Area3D *area = Object::cast_to<Area3D>(overlapping_areas[i]);
-			if (area && area != attack_sensor) {
-				Node *owner_node = area->get_parent();
-				if (owner_node && owner_node != this) {
-					hit_targets.append(owner_node);
-				} else {
-					hit_targets.append(area);
-				}
-			}
-		}
-	}
-
-	// 2. Direct arc-based spatial query fallback (strictly <= 2.5m reach & frontal cone)
-	// ensures combat works even if broadphase area cache was not updated in a synchronous script frame
-	if (hit_targets.is_empty()) {
-		Node *parent = get_parent();
-		if (parent) {
-			Array candidates;
-			TypedArray<Node> direct_children = parent->get_children();
-			for (int i = 0; i < direct_children.size(); i++) {
-				Node *child = Object::cast_to<Node>(direct_children[i]);
-				if (child && child != this) {
-					candidates.append(child);
-					if (child->get_name() == StringName("Enemies") || child->is_in_group("enemies")) {
-						TypedArray<Node> sub_children = child->get_children();
-						for (int j = 0; j < sub_children.size(); j++) {
-							candidates.append(sub_children[j]);
-						}
-					}
-				}
-			}
-
-			if (SceneTree *st = get_tree()) {
-				TypedArray<Node> boss_nodes = st->get_nodes_in_group("boss");
-				for (int i = 0; i < boss_nodes.size(); i++) {
-					Node *bn = Object::cast_to<Node>(boss_nodes[i]);
-					if (bn && !candidates.has(bn)) {
-						candidates.append(bn);
-					}
-				}
-			}
-
-			const float strict_reach = Math::min(attack_reach, 2.5f);
-			const float min_dot = 0.5f; // ~60 deg frontal cone
-			Vector3 my_pos = get_global_position();
-			int loop_iter = 0;
-			for (int i = 0; i < candidates.size(); i++) {
-				if (++loop_iter > 100) {
-					break;
-				}
-				Node3D *node_3d = Object::cast_to<Node3D>(candidates[i]);
-				if (node_3d && node_3d != this) {
-					Vector3 to_node = node_3d->get_global_position() - my_pos;
-					to_node.y = 0.0f;
-					float dist = to_node.length();
-					float allowed_reach = strict_reach;
-					if (node_3d->is_in_group("boss") || node_3d->get_name() == StringName("DialUpQueen")) {
-						allowed_reach = 4.8f;
-					}
-					if (dist <= allowed_reach && dist > 0.001f) {
-						Vector3 dir = to_node / dist;
-						if (facing_direction.dot(dir) >= min_dot) {
-							hit_targets.append(node_3d);
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// 3. Apply damage solely to valid distinct enemy targets
+	float multiplier = combo_hit == 3 ? 1.5f : 1.0f;
+	float damage = (base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f) * multiplier;
 	Array damaged_nodes;
-	for (int i = 0; i < hit_targets.size(); i++) {
-		Node *target = Object::cast_to<Node>(hit_targets[i]);
-		if (!target || damaged_nodes.has(target)) {
-			continue;
-		}
-
-		bool is_enemy = target->is_in_group("enemies") ||
-		                target->is_in_group("boss") ||
-		                (target->get_parent() && target->get_parent()->get_name() == StringName("Enemies")) ||
-		                target->has_method("take_damage");
-
-		if (is_enemy) {
-			damaged_nodes.append(target);
-			if (target->has_method("take_damage")) {
-				target->call("take_damage", static_cast<int>(damage), facing_direction);
-			} else {
-				MutatedBugEnemy *bug = Object::cast_to<MutatedBugEnemy>(target);
-				if (bug) {
-					bug->take_damage(damage);
+	if (attack_sensor && is_inside_tree()) {
+		// Area overlap caches lag a physics frame. Query the newly positioned shape directly.
+		attack_sensor->set_position(facing_direction * 1.2f + Vector3(0, 0.5f, 0));
+		CollisionShape3D *shape = Object::cast_to<CollisionShape3D>(attack_sensor->find_child("*", false, false));
+		if (shape && shape->get_shape().is_valid()) {
+			Ref<PhysicsShapeQueryParameters3D> query;
+			query.instantiate();
+			query->set_shape(shape->get_shape());
+			query->set_transform(shape->get_global_transform());
+			query->set_collision_mask(attack_sensor->get_collision_mask() & ~1u);
+			query->set_collide_with_areas(true);
+			TypedArray<RID> excluded;
+			excluded.append(get_rid());
+			excluded.append(attack_sensor->get_rid());
+			query->set_exclude(excluded);
+			TypedArray<Dictionary> hits = get_world_3d()->get_direct_space_state()->intersect_shape(query, 64);
+			for (int i = 0; i < hits.size(); ++i) {
+				Dictionary result = hits[i];
+				Node *target = Object::cast_to<Node>(result["collider"]);
+				if (Object::cast_to<Area3D>(target) && !target->has_method("take_damage")) {
+					target = target->get_parent();
 				}
+				Node3D *body = Object::cast_to<Node3D>(target);
+				if (!body || target == this || !target->has_method("take_damage") || damaged_nodes.has(target)) {
+					continue;
+				}
+				Vector3 offset = body->get_global_position() - get_global_position();
+				if (Math::abs(offset.y) > 2.0f) {
+					continue;
+				}
+				offset.y = 0;
+				float reach = target->is_in_group("boss") ? 4.8f : attack_reach;
+				if (offset.length() > reach || (offset.length_squared() > 0.001f && facing_direction.dot(offset.normalized()) < 0.5f)) {
+					continue;
+				}
+				damaged_nodes.append(target);
+				target->call("take_damage", static_cast<int>(damage), facing_direction * multiplier);
 			}
 		}
 	}
-
 	if (!damaged_nodes.is_empty()) {
 		play_sfx("hit");
+		hit_stop(combo_hit == 3 ? 0.10f : 0.06f);
+		add_camera_trauma(0.25f);
 	} else {
 		play_sfx("swing");
 	}
-
 	emit_signal("attack_executed", damage);
+}
+
+void PlayerController::add_camera_trauma(float p_amount) {
+	Node *rig = find_child("IsometricCameraRig", true, false);
+	if (rig && rig->has_method("add_trauma")) {
+		rig->call("add_trauma", p_amount);
+	}
+}
+
+void PlayerController::hit_stop(float p_duration) {
+	if (!is_inside_tree()) {
+		return;
+	}
+	if (hit_stop_end_msec == 0) {
+		previous_time_scale = Engine::get_singleton()->get_time_scale();
+	}
+	hit_stop_end_msec = Math::max(hit_stop_end_msec, Time::get_singleton()->get_ticks_msec() + static_cast<uint64_t>(p_duration * 1000));
+	Engine::get_singleton()->set_time_scale(0.05);
+}
+
+void PlayerController::_exit_tree() {
+	if (hit_stop_end_msec != 0) {
+		Engine::get_singleton()->set_time_scale(previous_time_scale);
+		hit_stop_end_msec = 0;
+	}
 }
 
 void PlayerController::switch_tape(const String &p_tape_name) {

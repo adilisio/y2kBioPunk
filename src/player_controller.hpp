@@ -18,6 +18,7 @@
 #include <godot_cpp/classes/path_follow3d.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/sphere_shape3d.hpp>
+#include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/plane.hpp>
@@ -126,6 +127,12 @@ private:
 	// Combat: Baseball Bat Melee Attack
 	float attack_cooldown = 0.8f;
 	float attack_timer = 0.0f;
+	float pending_hit_timer = -1.0f;
+	float lunge_timer = 0.0f;
+	int combo_hit = 0;
+	bool combo_buffered = false;
+	uint64_t hit_stop_end_msec = 0;
+	double previous_time_scale = 1.0;
 	float base_attack_damage = 15.0f;
 	float attack_reach = 2.5f;
 	bool is_attacking = false;
@@ -149,6 +156,9 @@ private:
 	void recalculate_derived_stats();
 	void process_animation();
 	void rotate_visuals(const Vector3 &p_direction, double p_delta);
+	void start_combo_hit(int p_hit);
+	void hit_stop(float p_duration);
+	void add_camera_trauma(float p_amount);
 
 protected:
 	static void _bind_methods();
@@ -160,6 +170,7 @@ public:
 	void _ready() override;
 	void _physics_process(double p_delta) override;
 	void _process(double p_delta) override;
+	void _exit_tree() override;
 
 	// XP & Leveling
 	int get_level() const;

@@ -1,3 +1,4 @@
+# GENERATOR TOOL: Overwrites scenes/FloodedMall_Greybox.tscn. Must never be run by a test runner.
 extends SceneTree
 
 func _init():

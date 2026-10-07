@@ -30,8 +30,12 @@ extends Node3D
 @export var pillar_height: float = 5.0
 
 func _ready() -> void:
-	if auto_build_on_ready or (not Engine.is_editor_hint() and get_node_or_null("LevelGeometry") == null):
+	# At runtime the builder is the single source of truth for level geometry and materials:
+	# always rebuild so material/lighting changes in this script show up without regenerating the .tscn.
+	if auto_build_on_ready or not Engine.is_editor_hint():
 		build_mall_greybox()
+		if not Engine.is_editor_hint():
+			_connect_runtime_rails()
 	elif not Engine.is_editor_hint():
 		var enemies_node = get_node_or_null("Enemies")
 		if enemies_node and enemies_node.get_child_count() == 0:
@@ -89,18 +93,20 @@ func _process(delta: float) -> void:
 func _clear_existing_geometry() -> void:
 	var existing = get_node_or_null("LevelGeometry")
 	if existing:
-		existing.queue_free()
-		# In editor, remove immediately so rebuild is clean
+		# Detach immediately so the rebuilt node can reuse the name; free safely afterwards.
+		remove_child(existing)
 		if Engine.is_editor_hint():
-			remove_child(existing)
 			existing.free()
+		else:
+			existing.queue_free()
 
 	var existing_enemies = get_node_or_null("Enemies")
 	if existing_enemies:
-		existing_enemies.queue_free()
+		remove_child(existing_enemies)
 		if Engine.is_editor_hint():
-			remove_child(existing_enemies)
 			existing_enemies.free()
+		else:
+			existing_enemies.queue_free()
 
 func build_mall_greybox() -> void:
 	_clear_existing_geometry()
@@ -118,11 +124,11 @@ func build_mall_greybox() -> void:
 		enemies_root.owner = get_tree().edited_scene_root if get_tree() else self
 
 	# Create Materials
-	var mat_floor = _create_material(Color("#2a3136"), 0.9)
+	var mat_floor = _create_material(Color("#3b454d"), 0.9)
 	var mat_flooded = _create_material(Color("#0a3a3a"), 0.1, 0.2, 0.85)
 	var mat_high_wall = _create_material(Color(0.14, 0.16, 0.19), 0.75)
 	var mat_low_wall = _create_material(Color(0.42, 0.46, 0.52), 0.65)
-	var mat_pillar = _create_material(Color("#c9ced4"), 0.40)
+	var mat_pillar = _create_material(Color("#7f8a94"), 0.55)
 	var mat_kiosk = _create_material(Color("#d7a042"), 0.55, 0.0, 0.6, Color("#ff7a1a"), 0.3)
 	var mat_ramp = _create_material(Color(0.30, 0.38, 0.45), 0.60)
 	var mat_strip = _create_material(Color.CYAN, 0.5, 0.0, 1.0, Color.CYAN, 1.5)
@@ -252,7 +258,7 @@ func build_mall_greybox() -> void:
 	if Engine.is_editor_hint():
 		rails_parent.owner = get_tree().edited_scene_root if get_tree() else self
 
-	var mat_rail = _create_material(Color("#ffd23f"), 0.0, 0.0, 1.0, Color("#ffd23f"), 0.6)
+	var mat_rail = _create_material(Color("#ffd23f"), 0.3, 0.0, 1.0, Color("#ffd23f"), 2.2)
 
 	# Rail 1: Curving around the Sunken Atrium Basin
 	var basin_curve_pts: Array[Vector3] = [

@@ -263,6 +263,7 @@ func _execute_summon() -> void:
 			var minion = CharacterBody3D.new()
 			minion.name = "SummonedRoach_%d" % randi()
 			minion.set_script(roach_script)
+			minion.set_meta("summoned_by_boss", true)
 			get_parent().add_child(minion)
 			minion.global_position = spawn_pos
 			print("[DialUpQueen] Spawned bio-minion %s at %s" % [minion.name, spawn_pos])
@@ -308,7 +309,7 @@ func _process_phase_transition(delta: float) -> void:
 		_enter_idle()
 
 ## Public damage entry
-func take_damage(amount: int, _knockback_dir: Vector3 = Vector3.ZERO) -> void:
+func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		return
 	if is_invulnerable:
@@ -356,6 +357,15 @@ func _reset_flash_visual() -> void:
 func _die() -> void:
 	current_state = State.DEFEATED
 	print("[DialUpQueen] *** BOSS DEFEATED! The dial-up carrier frequency has died. ***")
+	
+	if target_player and is_instance_valid(target_player) and target_player.has_method("gain_xp"):
+		target_player.call("gain_xp", 250)
+	
+	if get_tree():
+		for node in get_tree().get_nodes_in_group("enemies"):
+			if node.has_meta("summoned_by_boss") and node.get_meta("summoned_by_boss"):
+				node.queue_free()
+				
 	emit_signal("boss_defeated")
 
 	# Dramatic shrink and explosion fade

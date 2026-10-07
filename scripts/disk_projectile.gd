@@ -23,7 +23,7 @@ func _ready() -> void:
 	_create_visuals()
 
 	body_entered.connect(_on_body_entered)
-	area_entered.connect(_on_area_entered)
+	# area_entered.connect(_on_area_entered) # Excluded to ignore rail GrindArea and world sensors
 
 func setup_projectile(p_direction: Vector3, p_speed: float, p_damage: float, p_shooter: Node = null) -> void:
 	direction = p_direction.normalized()

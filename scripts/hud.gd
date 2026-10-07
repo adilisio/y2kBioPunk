@@ -187,6 +187,19 @@ func _on_boss_defeated() -> void:
 		if boss_container:
 			boss_container.visible = false
 	)
+	# Slice ending: record completion, show the victory card, return to the menu.
+	var sm = get_node_or_null("/root/SaveManager")
+	if sm and sm.has_method("mark_slice_complete"):
+		sm.call("mark_slice_complete")
+	if player and player.has_method("set_movement_locked"):
+		player.call("set_movement_locked", true)
+	show_victory_card()
+	var back = create_tween()
+	back.tween_interval(6.0)
+	back.tween_callback(func():
+		if get_tree():
+			get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	)
 
 func _find_pager_node(node_name: String) -> Control:
 	var n = get_node_or_null("HUDOverlay/PagerBox/Margin/VBox/" + node_name)

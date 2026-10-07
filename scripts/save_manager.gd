@@ -26,6 +26,20 @@ func clear_save() -> void:
 func has_save_data() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
 
+## Records that the player finished the slice (boss defeated). Kept in the save so Continue can show it.
+func mark_slice_complete() -> void:
+	var data: Dictionary = cached_save_data if not cached_save_data.is_empty() else load_player_data()
+	if data.is_empty():
+		data = {"version": 1, "checkpoint_id": "", "player": {}}
+	data["slice_complete"] = true
+	data["completed_at"] = Time.get_datetime_string_from_system()
+	var file = FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(data, "\t"))
+		file.close()
+	cached_save_data = data
+	print("[SaveManager] Slice completion recorded.")
+
 func save_player_data(player: Node, checkpoint_id: String = "BioStabilizer_01", spawn_pos: Vector3 = Vector3.ZERO) -> bool:
 	if not player or not is_instance_valid(player):
 		push_warning("[SaveManager] Cannot save: invalid player node reference.")

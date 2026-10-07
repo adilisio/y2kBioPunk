@@ -88,4 +88,4 @@ Mirror of the Director ledger's outstanding work and deferred scope:
 - Deferred beyond Vertical Slice 1: new enemies, weapons and biomes; NPC/dialogue content; tape splicing; controller support. These are outside the slice's definition of done.
 - Existing dummy-renderer/teardown diagnostics and the legacy save-test skip remain verification limits recorded by WP-7; passing test gates do not assert warning-free output.
 
-*Updated October 7, 2026. Reflects Vertical Slice 1 as merged on `main` (all eight definition-of-done criteria, 18/18 headless suites).*
+*Updated October 7, 2026. Reflects Vertical Slice 1 as merged on `main` (all eight definition-of-done criteria, 19/19 headless suites).*

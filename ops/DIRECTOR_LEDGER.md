@@ -3,7 +3,7 @@
 Live project-state and handoff document. Director: Fable 5.1 session, 2026-10-07 15:35 → ~19:30.
 Another strong agent can resume directorship from this file plus `ops/CONTEXT.md`.
 Audits: `ops/reports/AUDIT-ARCH.md` (Codex), `AUDIT-PX.md` (Gemini), `AUDIT-FEEL.md` (Claude Opus). Packet reports: `ops/reports/WP-*.md`. Briefs: `ops/briefs/`.
-Gate: `powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1` (18 suites, all PASS at HEAD).
+Gate: `powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1` (19 suites, all PASS at HEAD).
 
 ## Current player experience (verified at HEAD, 2026-10-07 evening)
 
@@ -32,7 +32,7 @@ What is genuinely good (protect): the traversal fantasy (skate glide → rail �
 | 5 | Hurt feedback + i-frames; die → respawn at checkpoint with progression; no re-clear for boss | **Done** (`test_slice_e2e` d, `test_gameplay_fixes`) |
 | 6 | Queen with honest telegraphs; victory card; menu; Continue | **Done** (`test_slice_e2e` f–g) |
 | 7 | Sounds for swing/hit/hurt/jump/land/evade/grind/pickup/kill/clack; music continuity | **Done** (cues exist and fire; listening test NOT done — see Anthony checklist) |
-| 8 | No crash/dialog/console-only messaging; runner exits 0 | **Done** (18/18) |
+| 8 | No crash/dialog/console-only messaging; runner exits 0 | **Done** (19/19) |
 
 ## Work packets — final state
 

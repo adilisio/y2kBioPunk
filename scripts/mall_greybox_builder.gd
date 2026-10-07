@@ -49,6 +49,17 @@ func _ready() -> void:
 			p = get_tree().current_scene.find_child("Player", true, false) if get_tree() and get_tree().current_scene else null
 		if p:
 			p.add_to_group("player")
+			
+		var tut = get_node_or_null("../TutorialDirector")
+		if not tut:
+			tut = get_tree().current_scene.find_child("TutorialDirector", true, false) if get_tree() and get_tree().current_scene else null
+		if not tut:
+			var tut_script = load("res://scripts/tutorial_director.gd")
+			if tut_script:
+				tut = Node.new()
+				tut.name = "TutorialDirector"
+				tut.set_script(tut_script)
+				add_child(tut)
 
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():

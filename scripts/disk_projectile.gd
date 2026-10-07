@@ -85,6 +85,8 @@ func _on_area_entered(area: Area3D) -> void:
 
 func _apply_hit(target: Node) -> void:
 	is_active = false
+	if shooter and is_instance_valid(shooter) and shooter.has_method("play_sfx"):
+		shooter.call("play_sfx", "disk_hit")
 	if target and is_instance_valid(target):
 		if target.has_method("take_damage"):
 			target.call("take_damage", int(damage), direction * 8.5)

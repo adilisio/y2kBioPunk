@@ -834,6 +834,9 @@ func _on_secondary_weapon_switched(_type: int, name_val: String) -> void:
 		action_secondary_label.text = "[RMB] %s" % ("FLAME" if "Flame" in name_val else "SEC")
 	_update_control_tip()
 
+var current_tutorial_hint: String = ""
+var tutorial_finished: bool = false
+
 func _update_control_tip() -> void:
 	if not control_tip:
 		control_tip = _find_pager_node("ControlTip")
@@ -844,39 +847,61 @@ func _update_control_tip() -> void:
 		control_tip.text = "[color=#ff4444][b]NEURAL LINK LOST. REBOOTING SYSTEM CLONE...[/b][/color]"
 		return
 
-	# Replaced long movement and attack strings with simple prompt
-	var unspent = player.call("get_unspent_stat_points") if player and player.has_method("get_unspent_stat_points") else 0
-	if unspent > 0:
-		control_tip.text = "[b][color=#ffaa00][C][/color] Character Sheet[/b] [color=#ffdd44](+%d Pt)[/color]" % unspent
+	if pager_messages.size() > 0:
+		return
+
+	if not tutorial_finished:
+		if current_tutorial_hint != "":
+			control_tip.text = "[center]" + current_tutorial_hint + "[/center]"
+		else:
+			control_tip.text = ""
 	else:
-		control_tip.text = "[b][color=#ffaa00][C][/color] Character Sheet[/b]"
+		control_tip.text = "[center]WASD · LMB · RMB/F · Q · K · T · SHIFT · C[/center]"
 
 # --- Message Pager System ---
 
 var pager_messages: Array[Dictionary] = []
 
-func page_message(msg: String, secs: float = 3.0) -> void:
+func page_message(msg: String, secs: float = 3.0, key_hint: String = "") -> void:
+	if key_hint != "":
+		current_tutorial_hint = key_hint
+		
 	pager_messages.append({"text": msg, "time": secs})
 	if pager_messages.size() > 3:
 		pager_messages.pop_front()
+		
+	if player and player.has_method("play_sfx"):
+		player.call("play_sfx", "page_beep")
+		
 	_update_pager_display()
+
+func clear_pager():
+	pager_messages.clear()
+	_update_pager_display()
+	_update_control_tip()
 
 func _update_pager_display() -> void:
 	if control_tip and control_tip is RichTextLabel:
-		var bbcode = ""
-		for m in pager_messages:
-			bbcode += "[center]%s[/center]\n" % m.text
-		control_tip.text = bbcode
-		control_tip.add_theme_font_size_override("normal_font_size", 20)
-		control_tip.add_theme_font_size_override("bold_font_size", 20)
-		control_tip.add_theme_font_size_override("italics_font_size", 20)
-		control_tip.add_theme_font_size_override("bold_italics_font_size", 20)
+		if pager_messages.size() > 0:
+			var bbcode = ""
+			for m in pager_messages:
+				bbcode += "[center]%s[/center]\n" % m.text
+			control_tip.text = bbcode
+			control_tip.add_theme_font_size_override("normal_font_size", 20)
+			control_tip.add_theme_font_size_override("bold_font_size", 20)
+			control_tip.add_theme_font_size_override("italics_font_size", 20)
+			control_tip.add_theme_font_size_override("bold_italics_font_size", 20)
+		else:
+			_update_control_tip()
 	elif control_tip and control_tip is Label:
-		var t = ""
-		for m in pager_messages:
-			t += m.text + "\n"
-		control_tip.text = t
-		control_tip.add_theme_font_size_override("font_size", 20)
+		if pager_messages.size() > 0:
+			var t = ""
+			for m in pager_messages:
+				t += m.text + "\n"
+			control_tip.text = t
+			control_tip.add_theme_font_size_override("font_size", 20)
+		else:
+			_update_control_tip()
 	
 	if pager_box:
 		pager_box.reset_size()

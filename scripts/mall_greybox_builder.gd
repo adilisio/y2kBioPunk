@@ -306,8 +306,8 @@ func _spawn_enemies(enemies_container: Node3D = null) -> void:
 
 	if scene_to_spawn and scene_to_spawn.can_instantiate():
 		var spawn_points: Array[Vector3] = [
-			Vector3(-6.0, 1.0, 6.0),
-			Vector3(6.0, 1.0, 6.0),
+			Vector3(-6.5, 1.0, 2.5),
+			Vector3(6.5, 1.0, 2.5),
 			Vector3(-17.0, 2.3, 2.0)
 		]
 

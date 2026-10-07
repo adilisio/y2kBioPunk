@@ -114,7 +114,7 @@ private:
 	bool is_equipped_skates = false; // Default: responsive 3D walking
 	bool is_movement_locked = false; // Pauses movement during dialogue / menus
 	Vector3 facing_direction = Vector3(0.0f, 0.0f, 1.0f);
-	float rotation_speed = 12.0f;
+	float rotation_speed = 25.0f;
 	float gravity = 9.8f;
 	float base_movement_speed = 6.0f;
 	float jump_velocity = 6.0f;
@@ -143,6 +143,8 @@ private:
 	Vector2 get_raw_input_direction() const;
 	void execute_bat_attack();
 	void recalculate_derived_stats();
+	void process_animation();
+	void rotate_visuals(const Vector3 &p_direction, double p_delta);
 
 protected:
 	static void _bind_methods();

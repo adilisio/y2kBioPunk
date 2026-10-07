@@ -76,13 +76,13 @@ void PlayerController::_ready() {
 		}
 	}
 	if (anim_player) {
-		anim_player->set_speed_scale(1.0f);
-		if (anim_player->has_animation("restpose")) {
-			anim_player->play("restpose");
-		} else if (anim_player->has_animation("Walking")) {
-			anim_player->play("Walking");
-			anim_player->pause();
+		anim_player->set_default_blend_time(0.12);
+		for (const char *name : { "Walking", "Running", "Skate_Grind" }) {
+			if (anim_player->has_animation(name)) {
+				anim_player->get_animation(name)->set_loop_mode(Animation::LOOP_LINEAR);
+			}
 		}
+		process_animation();
 	}
 
 	// Retrieve FlamethrowerParticles node (child of Visuals)
@@ -641,7 +641,7 @@ void PlayerController::_physics_process(double p_delta) {
 				}
 			}
 			if (anim_player) {
-				float exit_speed = (is_skating || is_equipped_skates) ? 2.0f : 1.0f;
+				float exit_speed = 1.0f;
 				anim_player->set_speed_scale(exit_speed);
 				if (get_velocity().length() > 0.0001f) {
 					String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
@@ -837,42 +837,57 @@ void PlayerController::_physics_process(double p_delta) {
 		}
 	}
 
-	// 5. Animation: Check movement vector / velocity when not attacking.
-	if (!anim_player) {
-		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-		if (!anim_player) {
-			anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-		}
-		if (!anim_player && visuals) {
-			anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer", true, false));
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer2", true, false));
-			}
-		}
+	process_animation();
+}
+
+void PlayerController::rotate_visuals(const Vector3 &p_direction, double p_delta) {
+	if (!visuals || p_direction.length_squared() < 0.0001f) {
+		return;
 	}
-	if (anim_player) {
-		if (!is_attacking && (current_state == STATE_NORMAL || current_state == STATE_AIRBORNE)) {
-			Vector3 vel = get_velocity();
-			float horizontal_speed_sq = vel.x * vel.x + vel.z * vel.z;
-			bool is_moving = (move_direction.length_squared() > 0.0001f || horizontal_speed_sq > 0.0001f);
+	Transform3D transform = visuals->is_inside_tree() ? visuals->get_global_transform() : visuals->get_transform();
+	Vector3 scale = transform.basis.get_scale();
+	Basis target_basis = Basis::looking_at(p_direction, Vector3(0, 1, 0));
+	float weight = Math::clamp(rotation_speed * static_cast<float>(p_delta), 0.0f, 1.0f);
+	transform.basis = transform.basis.orthonormalized().slerp(target_basis, weight).orthonormalized().scaled(scale);
+	if (visuals->is_inside_tree()) {
+		visuals->set_global_transform(transform);
+	} else {
+		visuals->set_transform(transform);
+	}
+}
 
-			if (is_moving) {
-				// Locomotion States: "Walking" when skates_equipped == false, "Running" when skates_equipped == true
-				String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
-				anim_player->set_speed_scale(1.0f);
-
-				if (anim_player->get_current_animation() != anim_to_play || !anim_player->is_playing()) {
-					anim_player->play(anim_to_play);
-				}
-			} else {
-				// Idle State: Play "restpose" when movement input/velocity drops to zero in default state
-				String idle_anim = "restpose";
-				anim_player->set_speed_scale(1.0f);
-
-				if (anim_player->get_current_animation() != idle_anim || !anim_player->is_playing()) {
-					anim_player->play(idle_anim);
-				}
-			}
+void PlayerController::process_animation() {
+	if (!anim_player || is_attacking || current_state == STATE_EVADING || current_state == STATE_GRINDING || current_state == STATE_DEAD) {
+		return;
+	}
+	Vector3 hv = get_velocity();
+	hv.y = 0;
+	float speed = hv.length();
+	if (!is_on_floor() && !is_movement_locked) {
+		if (anim_player->has_animation("Running")) {
+			anim_player->play("Running");
+			anim_player->seek(0.18, true);
+			anim_player->pause();
+		}
+	} else if (speed < 0.1f || is_movement_locked) {
+		if (anim_player->has_animation("Punch_Combo_1")) {
+			anim_player->set_speed_scale(1.0f);
+			anim_player->play("Punch_Combo_1");
+			anim_player->seek(2.10, true);
+			anim_player->pause();
+		}
+	} else {
+		bool glide = (is_skating || is_equipped_skates) && speed >= 6.0f;
+		String clip = glide && anim_player->has_animation("Skate_Grind") ? "Skate_Grind" : "Running";
+		float rate = clip == "Skate_Grind" ? 1.0f : (glide ? 2.2f : Math::clamp(speed / 2.62f, 0.8f, 2.2f));
+		Input *input = Input::get_singleton();
+		bool aiming = input && (input->is_action_pressed("secondary_fire") || input->is_action_pressed("secondary_attack"));
+		if (aiming && facing_direction.dot(hv.normalized()) < -0.3f) {
+			rate = -rate;
+		}
+		anim_player->set_speed_scale(rate);
+		if (anim_player->has_animation(clip) && (anim_player->get_current_animation() != clip || !anim_player->is_playing())) {
+			anim_player->play(clip);
 		}
 	}
 }
@@ -1076,18 +1091,7 @@ bool PlayerController::orient_towards_point(const Vector3 &p_target_world_pos) {
 		}
 	}
 
-	if (visuals) {
-		if (visuals->is_inside_tree()) {
-			Vector3 visuals_pos = visuals->get_global_position();
-			Vector3 visuals_target = target_pos;
-			visuals_target.y = visuals_pos.y;
-			if (visuals_pos.distance_squared_to(visuals_target) > 0.01f) {
-				visuals->look_at(visuals_target, Vector3(0.0f, 1.0f, 0.0f));
-			}
-		} else {
-			visuals->set_basis(Basis::looking_at(aim_dir, Vector3(0.0f, 1.0f, 0.0f)));
-		}
-	}
+	rotate_visuals(aim_dir, get_physics_process_delta_time());
 
 	if (!attack_sensor) {
 		attack_sensor = Object::cast_to<Area3D>(find_child("AttackSensor", false, false));
@@ -1146,7 +1150,7 @@ void PlayerController::attack() {
 	}
 	float duration = 2.3f / 2.0f;
 	if (anim_player) {
-		anim_player->set_speed_scale(2.0f);
+		anim_player->set_speed_scale(2.4f);
 		if (anim_player->has_animation("Punch_Combo_1")) {
 			anim_player->play("Punch_Combo_1");
 		} else if (anim_player->has_animation("Attack")) {
@@ -1580,7 +1584,7 @@ void PlayerController::set_is_attacking(bool p_attacking) {
 		if (attack_timer <= 0.0f) {
 			float duration = 2.3f / 2.0f;
 			if (anim_player) {
-				anim_player->set_speed_scale(2.0f);
+				anim_player->set_speed_scale(2.4f);
 				double anim_len = anim_player->get_current_animation_length();
 				if (anim_len > 0.05) {
 					duration = static_cast<float>(anim_len / 2.0);
@@ -1598,7 +1602,7 @@ void PlayerController::set_is_attacking(bool p_attacking) {
 			}
 		}
 		if (anim_player) {
-			float exit_speed = (is_skating || is_equipped_skates) ? 2.0f : 1.0f;
+			float exit_speed = 1.0f;
 			anim_player->set_speed_scale(exit_speed);
 			if (get_velocity().length() > 0.0001f) {
 				String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";

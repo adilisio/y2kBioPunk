@@ -2343,7 +2343,7 @@ process_material = SubResource("ParticleProcessMaterial_flame")
 draw_pass_1 = SubResource("QuadMesh_flame")
 
 [node name="Meshy_AI_biopunk_delinquent_te_All_Animations" type="Node3D" parent="Player/Visuals"]
-transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 1, 0)
+transform = Transform3D(-1, 0, -8.74228e-08, 0, 1, 0, 8.74228e-08, 0, -1, 0, 0, 0)
 
 [node name="target_character" type="Node3D" parent="Player/Visuals/Meshy_AI_biopunk_delinquent_te_All_Animations"]
 

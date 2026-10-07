@@ -44,9 +44,23 @@ var wing_right: CSGBox3D = null
 var aoe_telegraph_ring: CSGCylinder3D = null
 var hit_tween: Tween = null
 var flash_tween: Tween = null
+var aoe_outline: MeshInstance3D
+var aoe_center := Vector3.ZERO
+var aoe_tween: Tween
+var aoe_flashing := false
 var wing_flap_timer: float = 0.0
 
+const FX = preload("res://scripts/turret_mortar.gd")
+var dying := false
+var sfx: AudioStreamPlayer3D
+
+func _play_sfx(duration: float, frequency: float, noise: float = 0.0) -> void:
+	sfx.stream = FX.sound(duration, frequency, noise)
+	sfx.play()
+
 func _ready() -> void:
+	sfx = AudioStreamPlayer3D.new()
+	add_child(sfx)
 	current_health = max_health
 	current_phase = 1
 	add_to_group("enemies")
@@ -62,6 +76,8 @@ func _ready() -> void:
 	print("[DialUpQueen] *** BOSS SPAWNED *** The Dial-Up Queen looms with %d HP!" % max_health)
 
 func _physics_process(delta: float) -> void:
+	if dying:
+		return
 	# Hover physics
 	if not is_on_floor():
 		velocity.y -= gravity * delta * 0.5 # Low-gravity hover
@@ -182,45 +198,94 @@ func _face_player(delta: float) -> void:
 # AOE ATTACK: MODEM SCREECH BIO-SHOCKWAVE
 # =============================================================================
 
+func _charge_duration() -> float:
+	return [1.4, 1.1, 0.9][current_phase - 1]
+
+func _aoe_radius() -> float:
+	return [7.0, 9.0, 11.0][current_phase - 1]
+
+func _clear_telegraph() -> void:
+	if aoe_tween and aoe_tween.is_valid():
+		aoe_tween.kill()
+	if is_instance_valid(aoe_outline):
+		aoe_outline.queue_free()
+	if aoe_telegraph_ring:
+		aoe_telegraph_ring.visible = false
+
+func _outline(radius: float, color: Color) -> MeshInstance3D:
+	var ring := MeshInstance3D.new()
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = radius - 0.07
+	mesh.outer_radius = radius
+	mesh.rings = 64
+	mesh.ring_segments = 8
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = color
+	mat.emission_enabled = true
+	mat.emission = color
+	mesh.material = mat
+	ring.mesh = mesh
+	get_parent().add_child(ring)
+	ring.global_position = aoe_center
+	return ring
+
 func _enter_aoe_attack() -> void:
+	_clear_telegraph()
 	current_state = State.AOE_ATTACK
-	state_timer = 1.2 if current_phase == 1 else (0.9 if current_phase == 2 else 0.7) # Charging telegraph
+	state_timer = _charge_duration()
+	aoe_flashing = false
 	velocity.x = 0.0
 	velocity.z = 0.0
-
-	var radius = 7.0 if current_phase == 1 else (10.0 if current_phase == 2 else 12.0)
-	print("[DialUpQueen] >>> CHARGING MODEM SCREECH AOE! (Radius: %.1fm)" % radius)
-
-	# Telegraph ring expansion visual
+	aoe_center = FX.floor_point(self, global_position)
+	var radius := _aoe_radius()
+	aoe_outline = _outline(radius, Color(1, 0.05, 0.02, 0.6))
+	_play_sfx(0.8, 1600.0, 0.35)
+	print("[DialUpQueen] >>> CHARGING MODEM SCREECH AOE! (Radius: %.1fm, charge %.1fs)" % [radius, state_timer])
 	if aoe_telegraph_ring:
+		aoe_telegraph_ring.top_level = true
+		aoe_telegraph_ring.global_position = aoe_center
 		aoe_telegraph_ring.visible = true
-		aoe_telegraph_ring.radius = 0.5
-		var tween = create_tween()
-		tween.tween_property(aoe_telegraph_ring, "radius", radius, state_timer)
+		aoe_telegraph_ring.radius = 0.05
+		var mat := aoe_telegraph_ring.material as StandardMaterial3D
+		mat.albedo_color = Color(1, 0.1, 0.05, 0.25)
+		mat.emission = Color.RED
+		aoe_tween = create_tween()
+		aoe_tween.tween_property(aoe_telegraph_ring, "radius", radius, state_timer - 0.1)
 
 func _process_aoe(delta: float) -> void:
 	state_timer -= delta
+	if state_timer <= 0.1 and not aoe_flashing:
+		aoe_flashing = true
+		if aoe_telegraph_ring:
+			var mat := aoe_telegraph_ring.material as StandardMaterial3D
+			mat.albedo_color = Color(1, 1, 1, 0.6)
+			mat.emission = Color.WHITE
 	if state_timer <= 0.0:
 		_detonate_aoe()
 		_enter_idle()
 
 func _detonate_aoe() -> void:
-	var radius = 7.0 if current_phase == 1 else (10.0 if current_phase == 2 else 12.0)
-	var damage = aoe_base_damage if current_phase == 1 else int(aoe_base_damage * 1.4)
+	var radius := _aoe_radius()
+	var damage := aoe_base_damage if current_phase == 1 else int(aoe_base_damage * 1.4)
+	_clear_telegraph()
+	var shock := _outline(radius, Color(1, 0.4, 0.1, 0.8))
+	shock.scale = Vector3(0.05, 1, 0.05)
+	var tween := shock.create_tween()
+	tween.tween_property(shock, "scale", Vector3.ONE, 0.25)
+	tween.tween_callback(shock.queue_free)
+	FX.burst(self, Color(1, 0.3, 0.05), 12, 0.35, 45.0)
+	var camera := get_viewport().get_camera_3d()
+	if camera and camera.get_parent().has_method("add_trauma"):
+		camera.get_parent().call("add_trauma", 0.5)
+	print("[DialUpQueen] Modem Screech detonated (%d damage, %.1fm)" % [damage, radius])
+	if is_instance_valid(target_player):
+		var offset: Vector3 = target_player.global_position - aoe_center
+		if Vector2(offset.x, offset.z).length() <= radius and absf(offset.y) <= 3.0 and target_player.has_method("take_damage"):
+			target_player.call("take_damage", damage, offset.normalized())
 
-	print("[DialUpQueen] *SKREEEE-CHIRP-CRASH!* Modem Screech detonated! Dealing %d damage in %.1fm radius" % [damage, radius])
-
-	if aoe_telegraph_ring:
-		aoe_telegraph_ring.visible = false
-
-	# Query targets in shockwave radius
-	if target_player and is_instance_valid(target_player):
-		var dist = global_position.distance_to(target_player.global_position)
-		if dist <= radius:
-			var to_player = (target_player.global_position - global_position).normalized()
-			if target_player.has_method("take_damage"):
-				target_player.call("take_damage", damage)
-				print("[DialUpQueen] Player hit by Modem Screech! Dealt %d damage" % damage)
+func _exit_tree() -> void:
+	_clear_telegraph()
 
 # =============================================================================
 # MINION SUMMONING BEHAVIOR
@@ -247,7 +312,11 @@ func _process_summon(delta: float) -> void:
 		_enter_idle()
 
 func _execute_summon() -> void:
-	var count = 2 if current_phase == 1 else (3 if current_phase == 2 else 4)
+	var living := 0
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if enemy.get_meta("summoned_by_boss", false) and not enemy.is_queued_for_deletion():
+			living += 1
+	var count := mini(4 - living, 2 if current_phase == 1 else (3 if current_phase == 2 else 4))
 
 	for i in range(count):
 		var angle = (TAU / count) * i + randf_range(-0.3, 0.3)
@@ -273,6 +342,7 @@ func _execute_summon() -> void:
 # =============================================================================
 
 func _trigger_phase_transition(new_phase: int) -> void:
+	_clear_telegraph()
 	current_phase = new_phase
 	current_state = State.PHASE_TRANSITION
 	state_timer = 1.8
@@ -355,6 +425,15 @@ func _reset_flash_visual() -> void:
 		queen_body.material_override = null
 
 func _die() -> void:
+	if dying:
+		return
+	_clear_telegraph()
+	_find_player()
+	dying = true
+	current_health = 0
+	set_physics_process(false)
+	remove_from_group("enemies")
+	FX.burst(self, Color(1, 0.1, 0.5), 10, 0.25, 60)
 	current_state = State.DEFEATED
 	print("[DialUpQueen] *** BOSS DEFEATED! The dial-up carrier frequency has died. ***")
 	
@@ -372,7 +451,7 @@ func _die() -> void:
 	if queen_body:
 		var death_tween = create_tween()
 		death_tween.tween_property(queen_body, "scale", Vector3(1.5, 0.2, 1.5), 0.4)
-		death_tween.tween_property(queen_body, "scale", Vector3.ZERO, 0.8)
+		death_tween.tween_property(queen_body, "scale", Vector3.ONE * 0.001, 0.8)
 		death_tween.tween_callback(queue_free)
 	else:
 		queue_free()

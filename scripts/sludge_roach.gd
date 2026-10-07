@@ -8,6 +8,7 @@ extends CharacterBody3D
 enum State {
 	IDLE,
 	TRACKING,
+	WINDUP,
 	POUNCING,
 	REPOSITIONING
 }
@@ -16,9 +17,9 @@ enum State {
 @export var max_health: int = 30
 var current_health: int = 30
 @export var scuttle_speed: float = 5.5
-@export var pounce_speed: float = 8.5
+@export var pounce_speed: float = 11.0
 @export var detection_radius: float = 12.0
-@export var attack_reach: float = 2.0
+@export var attack_reach: float = 3.5
 @export var bite_damage: int = 10
 
 var current_state: State = State.IDLE
@@ -33,10 +34,21 @@ var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9
 var visual_mesh: CSGSphere3D = null
 var hit_tween: Tween = null
 var flash_tween: Tween = null
+var owns_pounce_slot := false
 var flank_offset_phase: float = 0.0
 var detection_area: Area3D = null
 
+const FX = preload("res://scripts/turret_mortar.gd")
+var dying := false
+var sfx: AudioStreamPlayer3D
+
+func _play_sfx(duration: float, frequency: float, noise: float = 0.0) -> void:
+	sfx.stream = FX.sound(duration, frequency, noise)
+	sfx.play()
+
 func _ready() -> void:
+	sfx = AudioStreamPlayer3D.new()
+	add_child(sfx)
 	current_health = max_health
 	flank_offset_phase = randf() * TAU
 	add_to_group("enemies")
@@ -73,7 +85,7 @@ func _setup_detection_area() -> void:
 		detection_area.body_exited.connect(_on_detection_body_exited)
 
 func _on_detection_body_entered(body: Node3D) -> void:
-	if body.is_in_group("player") or body.name == "Player" or body is CharacterBody3D:
+	if body.is_in_group("player") or body.name == "Player" or body.is_class("PlayerController"):
 		target_player = body
 		_enter_tracking()
 
@@ -83,6 +95,8 @@ func _on_detection_body_exited(body: Node3D) -> void:
 		_enter_idle()
 
 func _physics_process(delta: float) -> void:
+	if dying:
+		return
 	# 1. 3D Gravity
 	if not is_on_floor():
 		velocity.y -= gravity * delta
@@ -105,6 +119,8 @@ func _physics_process(delta: float) -> void:
 			_process_idle(delta)
 		State.TRACKING:
 			_process_tracking(delta)
+		State.WINDUP:
+			_process_windup(delta)
 		State.POUNCING:
 			_process_pouncing(delta)
 		State.REPOSITIONING:
@@ -113,6 +129,7 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 func _enter_idle() -> void:
+	_release_slot()
 	current_state = State.IDLE
 	velocity.x = 0.0
 	velocity.z = 0.0
@@ -148,7 +165,7 @@ func _process_tracking(delta: float) -> void:
 
 	# Ready to pounce
 	if dist <= attack_reach:
-		_enter_pouncing(to_player.normalized())
+		_enter_windup(to_player.normalized())
 		return
 
 	# Fast scuttling movement with flanking wave
@@ -165,10 +182,45 @@ func _process_tracking(delta: float) -> void:
 		var target_rot_y = atan2(-move_dir.x, -move_dir.z)
 		rotation.y = lerp_angle(rotation.y, target_rot_y, 10.0 * delta)
 
+func _release_slot() -> void:
+	if owns_pounce_slot and is_inside_tree():
+		var pack := get_tree().root
+		pack.set_meta("roach_attack_slots", maxi(0, int(pack.get_meta("roach_attack_slots", 0)) - 1))
+	owns_pounce_slot = false
+
+func _exit_tree() -> void:
+	_release_slot()
+
+func _enter_windup(dir: Vector3) -> void:
+	var pack := get_tree().root
+	var slots := int(pack.get_meta("roach_attack_slots", 0))
+	if slots >= 2:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
+	pack.set_meta("roach_attack_slots", slots + 1)
+	owns_pounce_slot = true
+	current_state = State.WINDUP
+	state_timer = 0.35
+	pounce_direction = dir
+	velocity.x = 0.0
+	velocity.z = 0.0
+	_play_sfx(0.25, 1300.0, 0.85)
+	if visual_mesh:
+		_flash_hit_visual()
+		var cue := create_tween()
+		cue.tween_property(visual_mesh, "scale", Vector3(1.3, 0.5, 1.3), 0.1)
+	print("[SludgeRoach] wind-up (0.35s)")
+
+func _process_windup(delta: float) -> void:
+	state_timer -= delta
+	if state_timer <= 0.0:
+		_enter_pouncing(pounce_direction)
+
 func _enter_pouncing(dir: Vector3) -> void:
 	current_state = State.POUNCING
 	pounce_direction = dir
-	state_timer = 0.45
+	state_timer = 0.4
 	velocity.x = pounce_direction.x * pounce_speed
 	velocity.z = pounce_direction.z * pounce_speed
 	velocity.y = 2.0 # Little leap
@@ -184,8 +236,8 @@ func _process_pouncing(delta: float) -> void:
 
 	# Check contact with player during pounce
 	if target_player and is_instance_valid(target_player):
-		var dist = global_position.distance_to(target_player.global_position)
-		if dist <= 1.2:
+		var offset := target_player.global_position - global_position
+		if Vector2(offset.x, offset.z).length() <= 1.4 and absf(offset.y) <= 2.0:
 			if target_player.has_method("take_damage"):
 				target_player.call("take_damage", bite_damage)
 				print("[SludgeRoach] %s pounce bit player! Dealt %d damage" % [name, bite_damage])
@@ -197,13 +249,18 @@ func _process_pouncing(delta: float) -> void:
 
 func _enter_repositioning() -> void:
 	current_state = State.REPOSITIONING
-	state_timer = randf_range(0.4, 0.8)
+	state_timer = 1.2
+	_release_slot()
+	_reset_flash_visual()
+	if visual_mesh:
+		var recover := create_tween()
+		recover.tween_property(visual_mesh, "scale", Vector3(0.8, 0.4, 1.3), 0.15)
 	# Scuttle backward or to the side
 	var away_dir = -pounce_direction
 	if randf() > 0.5:
 		away_dir = Vector3(-pounce_direction.z, 0.0, pounce_direction.x)
-	velocity.x = away_dir.x * (scuttle_speed * 0.7)
-	velocity.z = away_dir.z * (scuttle_speed * 0.7)
+	velocity.x = away_dir.x * 2.0
+	velocity.z = away_dir.z * 2.0
 
 func _process_repositioning(delta: float) -> void:
 	state_timer -= delta
@@ -218,6 +275,8 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		return
 
+	if current_state == State.REPOSITIONING:
+		amount = int(ceil(amount * 1.5))
 	current_health -= amount
 	print("[SludgeRoach] %s took %d damage! HP: %d/%d" % [name, amount, max(0, current_health), max_health])
 
@@ -239,7 +298,7 @@ func _flash_hit_visual() -> void:
 		if flash_tween and flash_tween.is_valid():
 			flash_tween.kill()
 		flash_tween = create_tween()
-		flash_tween.tween_interval(0.25)
+		flash_tween.tween_interval(0.75 if current_state == State.WINDUP else 0.25)
 		flash_tween.tween_callback(Callable(self, "_reset_flash_visual"))
 
 func _reset_flash_visual() -> void:
@@ -306,6 +365,14 @@ func _build_visuals() -> void:
 	add_child(col)
 
 func _die() -> void:
+	if dying:
+		return
+	_release_slot()
+	dying = true
+	current_health = 0
+	set_physics_process(false)
+	remove_from_group("enemies")
+	FX.burst(self, Color(0.4, 0.7, 0.1), 10, 0.25, 90)
 	print("[SludgeRoach] %s squashed! Sludge splattered." % name)
 	var tree = get_tree()
 	if tree:
@@ -316,5 +383,5 @@ func _die() -> void:
 			p.call("gain_xp", 15)
 
 	var tween = create_tween()
-	tween.tween_property(self, "scale", Vector3.ZERO, 0.15)
+	tween.tween_property(self, "scale", Vector3.ONE * 0.001, 0.15)
 	tween.tween_callback(queue_free)

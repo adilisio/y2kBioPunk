@@ -7,7 +7,9 @@ extends CharacterBody3D
 enum State {
 	IDLE,
 	WANDERING,
-	CHASING
+	CHASING,
+	WINDUP,
+	LUNGING
 }
 
 @export_category("Combat & Stats")
@@ -16,7 +18,7 @@ var current_health: int = 50
 
 @export_category("Locomotion & AI")
 @export var move_speed: float = 2.0
-@export var chase_speed: float = 3.8
+@export var chase_speed: float = 3.0
 @export var wander_radius: float = 6.0
 @export var detection_radius: float = 8.5
 @export var pause_duration_min: float = 1.5
@@ -25,6 +27,9 @@ var current_health: int = 50
 
 var current_state: State = State.IDLE
 var state_timer: float = 0.0
+var attack_cooldown := 0.0
+var lunge_direction := Vector3.ZERO
+var lunge_hit := false
 var target_position: Vector3 = Vector3.ZERO
 var home_position: Vector3 = Vector3.ZERO
 var target_player: Node3D = null
@@ -41,7 +46,17 @@ var hit_tween: Tween
 var flash_tween: Tween
 var detection_area: Area3D = null
 
+const FX = preload("res://scripts/turret_mortar.gd")
+var dying := false
+var sfx: AudioStreamPlayer3D
+
+func _play_sfx(duration: float, frequency: float, noise: float = 0.0) -> void:
+	sfx.stream = FX.sound(duration, frequency, noise)
+	sfx.play()
+
 func _ready() -> void:
+	sfx = AudioStreamPlayer3D.new()
+	add_child(sfx)
 	current_health = max_health
 	home_position = global_position
 	add_to_group("enemies")
@@ -77,7 +92,7 @@ func _setup_detection_area() -> void:
 		detection_area.body_exited.connect(_on_detection_body_exited)
 
 func _on_detection_body_entered(body: Node3D) -> void:
-	if body.is_in_group("player") or body.name == "Player" or body is CharacterBody3D:
+	if body.is_in_group("player") or body.name == "Player" or body.is_class("PlayerController"):
 		target_player = body
 		_enter_chasing()
 
@@ -87,6 +102,9 @@ func _on_detection_body_exited(body: Node3D) -> void:
 		_enter_idle()
 
 func _physics_process(delta: float) -> void:
+	if dying:
+		return
+	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	# 1. Apply standard 3D gravity
 	if not is_on_floor():
 		velocity.y -= gravity * delta
@@ -108,6 +126,10 @@ func _physics_process(delta: float) -> void:
 				_process_wandering(delta)
 			State.CHASING:
 				_process_chasing(delta)
+			State.WINDUP:
+				_process_windup(delta)
+			State.LUNGING:
+				_process_lunge(delta)
 
 	# 3. Apply physics locomotion
 	move_and_slide()
@@ -178,6 +200,9 @@ func _process_chasing(delta: float) -> void:
 		_enter_idle()
 		return
 
+	if dist <= 2.5 and attack_cooldown <= 0.0:
+		_enter_windup(to_player.normalized())
+		return
 	var move_dir = to_player.normalized()
 	velocity.x = move_dir.x * chase_speed
 	velocity.z = move_dir.z * chase_speed
@@ -185,6 +210,47 @@ func _process_chasing(delta: float) -> void:
 	if move_dir.length_squared() > 0.001:
 		var target_rot_y = atan2(-move_dir.x, -move_dir.z)
 		rotation.y = lerp_angle(rotation.y, target_rot_y, 9.0 * delta)
+
+func _enter_windup(dir: Vector3) -> void:
+	current_state = State.WINDUP
+	state_timer = 0.5
+	lunge_direction = dir
+	velocity.x = 0.0
+	velocity.z = 0.0
+	if visual_mesh:
+		_flash_hit_visual()
+		var cue := create_tween()
+		cue.tween_property(visual_mesh, "scale", Vector3(1.4, 0.8, 1.4), 0.25)
+		cue.tween_property(visual_mesh, "scale", Vector3.ONE, 0.25)
+		var pulse := create_tween()
+		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 3.0, 0.25)
+		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 1.0, 0.25)
+	print("[NeonDialUpCicada] wind-up (0.5s)")
+
+func _process_windup(delta: float) -> void:
+	state_timer -= delta
+	if state_timer <= 0.0:
+		current_state = State.LUNGING
+		state_timer = 0.3
+		attack_cooldown = 1.5
+		lunge_hit = false
+		_play_sfx(0.16, 1800.0, 0.2)
+		print("[NeonDialUpCicada] lunge (1.5m, 6 damage)")
+
+func _process_lunge(delta: float) -> void:
+	state_timer -= delta
+	velocity.x = lunge_direction.x * 5.0
+	velocity.z = lunge_direction.z * 5.0
+	var contact := false
+	if is_instance_valid(target_player):
+		var offset := target_player.global_position - global_position
+		contact = Vector2(offset.x, offset.z).length() <= 1.6 and absf(offset.y) <= 2.2
+	if not lunge_hit and contact:
+		lunge_hit = true
+		if target_player.has_method("take_damage"):
+			target_player.call("take_damage", 6, lunge_direction)
+	if state_timer <= 0.0:
+		_enter_chasing()
 
 ## Public damage interface called by C++ PlayerController and combat volumes
 func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
@@ -214,7 +280,7 @@ func _flash_hit_visual() -> void:
 		if flash_tween and flash_tween.is_valid():
 			flash_tween.kill()
 		flash_tween = create_tween()
-		flash_tween.tween_interval(0.3)
+		flash_tween.tween_interval(0.5 if current_state == State.WINDUP else 0.3)
 		flash_tween.tween_callback(Callable(self, "_reset_flash_visual"))
 
 func _reset_flash_visual() -> void:
@@ -256,6 +322,13 @@ func _apply_knockback(override_dir: Vector3 = Vector3.ZERO) -> void:
 	state_timer = 0.6
 
 func _die() -> void:
+	if dying:
+		return
+	dying = true
+	current_health = 0
+	set_physics_process(false)
+	remove_from_group("enemies")
+	FX.burst(self, Color(0.1, 1, 0.7), 10, 0.25, 700)
 	print("[NeonDialUpCicada] %s was defeated! Dial-up carrier frequency severed." % name)
 	var tree = get_tree()
 	if tree:
@@ -266,5 +339,5 @@ func _die() -> void:
 			p.call("gain_xp", 10)
 
 	var tween = create_tween()
-	tween.tween_property(self, "scale", Vector3.ZERO, 0.15)
+	tween.tween_property(self, "scale", Vector3.ONE * 0.001, 0.15)
 	tween.tween_callback(queue_free)

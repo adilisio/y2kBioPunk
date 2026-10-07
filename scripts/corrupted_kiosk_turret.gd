@@ -17,7 +17,7 @@ enum State {
 @export var max_health: int = 120
 var current_health: int = 120
 @export var detection_range: float = 16.0
-@export var min_attack_range: float = 2.5
+@export var min_attack_range: float = 6.0
 @export var mortar_damage: int = 20
 @export var charge_time: float = 0.8
 @export var cooldown_time: float = 2.2
@@ -39,7 +39,17 @@ var flash_tween: Tween = null
 var charge_tween: Tween = null
 var detection_area: Area3D = null
 
+const FX = preload("res://scripts/turret_mortar.gd")
+var dying := false
+var sfx: AudioStreamPlayer3D
+
+func _play_sfx(duration: float, frequency: float, noise: float = 0.0) -> void:
+	sfx.stream = FX.sound(duration, frequency, noise)
+	sfx.play()
+
 func _ready() -> void:
+	sfx = AudioStreamPlayer3D.new()
+	add_child(sfx)
 	current_health = max_health
 	add_to_group("enemies")
 
@@ -75,7 +85,7 @@ func _setup_detection_area() -> void:
 		detection_area.body_exited.connect(_on_detection_body_exited)
 
 func _on_detection_body_entered(body: Node3D) -> void:
-	if body.is_in_group("player") or body.name == "Player" or body is CharacterBody3D:
+	if body.is_in_group("player") or body.name == "Player" or body.is_class("PlayerController"):
 		target_player = body
 		if current_state == State.IDLE:
 			_enter_tracking()
@@ -86,6 +96,8 @@ func _on_detection_body_exited(body: Node3D) -> void:
 		_enter_idle()
 
 func _physics_process(delta: float) -> void:
+	if dying:
+		return
 	# 1. Apply gravity (stationary, but settles on floor)
 	if not is_on_floor():
 		velocity.y -= gravity * delta
@@ -125,6 +137,7 @@ func _process_idle(delta: float) -> void:
 func _enter_tracking() -> void:
 	current_state = State.TRACKING
 	state_timer = 0.8
+	_play_sfx(0.35, 500.0)
 	_set_screen_color(Color(0.9, 0.7, 0.1, 1.0))
 
 func _process_tracking(delta: float) -> void:
@@ -145,6 +158,7 @@ func _process_tracking(delta: float) -> void:
 func _enter_charging() -> void:
 	current_state = State.CHARGING
 	state_timer = charge_time
+	_play_sfx(0.35, 1000.0)
 	_set_screen_color(Color(1.0, 0.1, 0.1, 1.0))
 
 	if head_pivot and is_instance_valid(head_pivot):
@@ -191,7 +205,14 @@ func _launch_mortar() -> void:
 	var target_pos = target_player.global_position
 	var forward_dir = head_pivot.global_transform.basis.z.normalized() if head_pivot else transform.basis.z.normalized()
 	var spawn_pos = (head_pivot.global_position if head_pivot else global_position) + (forward_dir * 1.1) + Vector3(0.0, 0.4, 0.0)
-	var fire_dir = (target_pos - spawn_pos).normalized()
+	if target_player is CharacterBody3D:
+		target_pos += target_player.velocity * 0.6
+	var offset: Vector3 = target_pos - spawn_pos
+	offset.y = 0.0
+	if offset.length_squared() < 0.001:
+		offset = forward_dir
+	target_pos = spawn_pos + offset.normalized() * clampf(offset.length(), 6.0, 18.0)
+	target_pos = FX.floor_point(self, target_pos)
 
 	print("[CorruptedKioskTurret] %s FIRED bio-sludge artillery at %s!" % [name, target_pos])
 
@@ -209,14 +230,12 @@ func _launch_mortar() -> void:
 
 	mortar.name = "TurretMortar_%d" % randi()
 
-	var mortar_speed = 14.0
-	var vel = fire_dir * mortar_speed + Vector3(0.0, 4.5, 0.0)
 
 	var spawn_parent = get_tree().current_scene if (get_tree() and get_tree().current_scene) else get_parent()
 	if spawn_parent:
 		spawn_parent.add_child(mortar)
 		if mortar.has_method("setup"):
-			mortar.call("setup", spawn_pos, vel, mortar_damage, self)
+			mortar.call("setup", spawn_pos, target_pos, mortar_damage, self)
 		else:
 			mortar.global_position = spawn_pos
 
@@ -332,6 +351,13 @@ func _build_visuals() -> void:
 	add_child(col_shape)
 
 func _die() -> void:
+	if dying:
+		return
+	dying = true
+	current_health = 0
+	set_physics_process(false)
+	remove_from_group("enemies")
+	FX.burst(self, Color(1, 0.5, 0.05), 10, 0.25, 80)
 	if flash_tween and flash_tween.is_valid():
 		flash_tween.kill()
 	if hit_tween and hit_tween.is_valid():
@@ -349,5 +375,5 @@ func _die() -> void:
 			p.call("gain_xp", 40)
 
 	var t = create_tween()
-	t.tween_property(self, "scale", Vector3.ZERO, 0.15)
+	t.tween_property(self, "scale", Vector3.ONE * 0.001, 0.15)
 	t.tween_callback(queue_free)

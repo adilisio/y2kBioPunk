@@ -9,7 +9,7 @@ class_name IsometricCameraRig
 @export var smooth_speed: float = 9.0
 @export var pitch_angle_deg: float = -45.0
 @export var yaw_angle_deg: float = 45.0
-@export var arm_length: float = 16.0
+@export var arm_length: float = 12.0
 @export var offset_height: float = 1.0
 
 var camera: Camera3D = null

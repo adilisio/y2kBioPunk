@@ -3,6 +3,7 @@ extends CanvasLayer
 # Pager Box UI
 @onready var pager_box: PanelContainer = $HUDOverlay/PagerBox
 var hp_bar: ProgressBar = null
+var adrenaline_bar: ProgressBar = null
 var hp_label: Control = null
 var xp_bar: ProgressBar = null
 var level_xp_label: Control = null
@@ -220,10 +221,37 @@ func _init_pager_nodes() -> void:
 		hp_label = get_node_or_null("HUDOverlay/HPLabel")
 	if not hp_label:
 		hp_label = _find_pager_node("HPLabel")
+	
+	if hp_label:
+		hp_label.add_theme_font_size_override("normal_font_size", 24)
+		hp_label.add_theme_font_size_override("bold_font_size", 24)
+		hp_label.add_theme_font_size_override("italics_font_size", 24)
+		hp_label.add_theme_font_size_override("bold_italics_font_size", 24)
+	
+	if hp_bar and not adrenaline_bar:
+		adrenaline_bar = ProgressBar.new()
+		adrenaline_bar.name = "AdrenalineBar"
+		adrenaline_bar.show_percentage = false
+		adrenaline_bar.custom_minimum_size = Vector2(0, 4)
+		var sb = StyleBoxFlat.new()
+		sb.bg_color = Color("#ff8800")
+		adrenaline_bar.add_theme_stylebox_override("fill", sb)
+		var sbb = StyleBoxFlat.new()
+		sbb.bg_color = Color("#221100")
+		adrenaline_bar.add_theme_stylebox_override("background", sbb)
+		hp_bar.get_parent().add_child(adrenaline_bar)
 
 	xp_bar = _find_pager_node("XPBar") as ProgressBar
 	level_xp_label = _find_pager_node("LevelXPLabel")
 	active_tape_label = _find_pager_node("ActiveTapeLabel")
+	
+	for lbl in [level_xp_label, active_tape_label]:
+		if lbl and lbl is RichTextLabel:
+			lbl.add_theme_font_size_override("normal_font_size", 16)
+			lbl.add_theme_font_size_override("bold_font_size", 16)
+			lbl.add_theme_font_size_override("italics_font_size", 16)
+			lbl.add_theme_font_size_override("bold_italics_font_size", 16)
+
 	stats_label = _find_pager_node("StatsLabel")
 	equip_label = _find_pager_node("EquipLabel")
 	control_tip = _find_pager_node("ControlTip")
@@ -277,6 +305,15 @@ func _ready() -> void:
 		setup_boss_bar(existing_boss)
 	player = get_node_or_null("../Player")
 	if player:
+		if player.has_signal("health_changed"): player.health_changed.connect(func(a,b): _refresh_hud())
+		if player.has_signal("stats_changed"): player.stats_changed.connect(_refresh_hud)
+		if player.has_signal("xp_changed"): player.xp_changed.connect(func(a,b,c): _refresh_hud())
+		if player.has_signal("leveled_up"): player.leveled_up.connect(_on_leveled_up)
+		if player.has_signal("skates_toggled"): player.skates_toggled.connect(_on_skates_toggled)
+		if player.has_signal("tape_switched"): player.tape_switched.connect(_on_tape_switched)
+		if player.has_signal("adrenaline_changed"): player.adrenaline_changed.connect(_on_adrenaline_changed)
+		if player.has_signal("secondary_weapon_switched"): player.secondary_weapon_switched.connect(_on_secondary_weapon_switched)
+		_refresh_hud()
 		var sm = get_node_or_null("/root/SaveManager")
 		if not sm:
 			var sm_script = load("res://scripts/save_manager.gd")
@@ -370,7 +407,7 @@ func _setup_ui_layout() -> void:
 		pager_box.offset_right = 10.0 + pager_box.size.x
 		pager_box.offset_bottom = 10.0 + pager_box.size.y
 		pager_box.pivot_offset = Vector2.ZERO
-		pager_box.scale = Vector2(0.7, 0.7)
+		pager_box.scale = Vector2(1.0, 1.0)
 
 	# 2. Bottom-Center Health Bar Alignment (doubled thickness, centered)
 	var health_container = get_node_or_null("HUDOverlay/HealthContainer")
@@ -435,7 +472,7 @@ func _setup_ui_layout() -> void:
 		walkman_box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 		walkman_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
 		walkman_box.pivot_offset = walkman_box.size
-		walkman_box.scale = Vector2(0.7, 0.7)
+		walkman_box.scale = Vector2(1.0, 1.0)
 
 	# 4. Bottom-Right Action Bar Alignment (anchored bottom-right, neatly stacked)
 	if action_bar:
@@ -461,7 +498,13 @@ func _process(delta: float) -> void:
 
 	# Poll player status
 	if player:
-		_refresh_hud()
+		if action_primary_icon and player.has_method("get_evade_cooldown"):
+			var cd = player.call("get_evade_cooldown")
+			action_primary_icon.color.a = 0.2 + 0.8 * (1.0 if cd <= 0.0 else 0.0)
+		if action_secondary_icon and player.has_method("get_secondary_cooldown"):
+			var cd = player.call("get_secondary_cooldown")
+			action_secondary_icon.color.a = 0.2 + 0.8 * (1.0 if cd <= 0.0 else 0.0)
+		_process_page_message(delta)
 
 	# 1. Pulsing Equalizer Bars
 	if eq_container:
@@ -522,9 +565,7 @@ func _on_xp_changed(cur_xp: int, req_xp: int, lvl: int) -> void:
 	_refresh_character_sheet()
 
 func _on_leveled_up(new_lvl: int, unspent_pts: int) -> void:
-	print("[Y2K-HUD] *** LEVEL UP! *** Reached Level %d! Unspent Points: %d" % [new_lvl, unspent_pts])
-	if control_tip:
-		control_tip.text = "[color=#ffdd44][b]LEVEL UP! BIO-SYNTHESIS COMPLETE. PRESS [C] TO ALLOCATE.[/b][/color]"
+	page_message("[color=#ffff00][b]LEVEL %d // +%d STAT PT [C][/b][/color]" % [new_lvl, unspent_pts])
 	_refresh_hud()
 	_refresh_character_sheet()
 
@@ -809,3 +850,52 @@ func _update_control_tip() -> void:
 		control_tip.text = "[b][color=#ffaa00][C][/color] Character Sheet[/b] [color=#ffdd44](+%d Pt)[/color]" % unspent
 	else:
 		control_tip.text = "[b][color=#ffaa00][C][/color] Character Sheet[/b]"
+
+# --- Message Pager System ---
+
+var pager_messages: Array[Dictionary] = []
+
+func page_message(msg: String, secs: float = 3.0) -> void:
+	pager_messages.append({"text": msg, "time": secs})
+	if pager_messages.size() > 3:
+		pager_messages.pop_front()
+	_update_pager_display()
+
+func _update_pager_display() -> void:
+	if control_tip and control_tip is RichTextLabel:
+		var bbcode = ""
+		for m in pager_messages:
+			bbcode += "[center]%s[/center]\n" % m.text
+		control_tip.text = bbcode
+		control_tip.add_theme_font_size_override("normal_font_size", 20)
+		control_tip.add_theme_font_size_override("bold_font_size", 20)
+		control_tip.add_theme_font_size_override("italics_font_size", 20)
+		control_tip.add_theme_font_size_override("bold_italics_font_size", 20)
+	elif control_tip and control_tip is Label:
+		var t = ""
+		for m in pager_messages:
+			t += m.text + "\n"
+		control_tip.text = t
+		control_tip.add_theme_font_size_override("font_size", 20)
+	
+	if pager_box:
+		pager_box.reset_size()
+
+func _process_page_message(delta: float) -> void:
+	if pager_messages.is_empty():
+		return
+	var changed = false
+	for i in range(pager_messages.size() - 1, -1, -1):
+		pager_messages[i].time -= delta
+		if pager_messages[i].time <= 0.0:
+			pager_messages.remove_at(i)
+			changed = true
+	if changed:
+		_update_pager_display()
+
+# --- Signal Handlers ---
+
+func _on_adrenaline_changed(current: float, maximum: float) -> void:
+	if adrenaline_bar:
+		adrenaline_bar.max_value = maximum
+		adrenaline_bar.value = current

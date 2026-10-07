@@ -107,6 +107,7 @@ y2k-biopunk-rpg/
 │   ├── neon_cicada.gd
 │   ├── save_manager.gd
 │   ├── sludge_roach.gd
+│   ├── tutorial_director.gd
 │   └── turret_mortar.gd
 │
 ├── scenes/                     # Godot scenes, 3D models, textures, animations
@@ -155,13 +156,13 @@ scons platform=windows target=template_debug
 Download Godot 4.3 separately: the engine executable is gitignored, not supplied by a fresh clone. From the repository root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1 -GodotBin C:/tools/Godot_v4.3-stable_win64.exe
-& C:/tools/Godot_v4.3-stable_win64.exe --headless --path . -s tests/test_slice_e2e.gd
+powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1    # finds Godot_v4.3-stable_win64.exe at the repo root (gitignored) or pass -GodotBin
+./Godot_v4.3-stable_win64.exe --headless --path . -s tests/test_slice_e2e.gd
 ```
 
 The runner discovers `test_*.gd` and `verify_*.gd`, checks exit codes, script errors and failed results, enforces a timeout, and stores logs in `ops/runs/tests/`. `_test_util.gd` provides assertions, cleanup and isolated saves. Passing does not imply warning-free rendering or an audio playtest.
 
-Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_critical_path`, `test_cursor_aiming`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_presentation`, `test_slice_e2e`, `test_systems`, `test_tapes`, and `verify_camera_and_hud` (all `.gd`).
+Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_critical_path`, `test_cursor_aiming`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_menu_flow`, `test_onboarding`, `test_presentation`, `test_slice_e2e`, `test_systems`, `test_tapes`, and `verify_camera_and_hud` (all `.gd`).
 
 `ops/tools/shot_harness.gd` captures in-engine screenshots and scripted input with `scene=`, `out=` and `steps=` arguments after `--`. Steps include `wait`, `shot`, `press`, `hold`, `release`, `key` and `quit`. It requires rendered/windowed Godot and is Director/human tooling: agents must not run it windowed or claim headless screenshots prove presentation. `shot.ps1` is also windowed tooling. `sim_steer.gd`, `smoke_mall.gd` and `balance_table.gd` are diagnostics; `build_greybox.gd` is a scene generator, not a test.
 
@@ -201,7 +202,7 @@ Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_cr
 - `mark_slice_complete()` persists `slice_complete` on Queen defeat; the victory card returns to the menu.
 - The boss gate is entry-triggered at z = -19, independent of clearing every enemy. `boss_encounter_trigger.gd` owns spawning; HUD owns boss display and victory flow.
 - `mall_greybox_builder.gd` rebuilds runtime geometry and encounters: it is the source of truth rather than stale baked `.tscn` geometry.
-- WP-6 intended behavior (landing separately): onboarding hints via the pager; music/SFX buses; tape resume. Do not infer verification from this description.
+- Onboarding and audio (WP-6, merged): `tutorial_director.gd` gates pager hints (move/swing, evade, tape, skates, grind, turret) on player state; the player creates `Music` and `SFX` buses at startup (music -8 dB), tapes resume their position and crossfade on switch, and cues fire for swing/hit/hurt/jump/land/evade/grind/pickup/kill/clack/level-up/pager. Covered by `tests/test_onboarding.gd`.
 - `StrandedSoldierNPC` and native `MutatedBugEnemy` remain registered but unused by the active slice.
 
 ### Isometric Geometry & Movement

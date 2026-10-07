@@ -55,9 +55,9 @@ The pre-boss roster contains nine enemies worth 170 experience points. Cicadas h
 
 The headless runner checks exit codes, script errors and failed results, with bounded per-test timeouts and persistent logs. Lifecycle/cleanup fixes repaired previously crashing tests. The end-to-end test drives fresh start, exact kill XP, level/stat spending, checkpoint save, death/respawn restoration, real rail entry, landing slam, boss phases/summons, victory, menu and Continue visibility. The ledger records three consecutive end-to-end passes. Its latest balance entry records a passing suite; WP-7 documents retained dummy-renderer/resource diagnostics and the legacy save-test skip. These are scripted gates, not proof of warning-free execution or a human audio/visual playtest.
 
-### Landing Separately (WP-6)
+### Onboarding and Audio (WP-6)
 
-Intended behavior: onboarding hints via the pager; music/SFX buses; tape resume. WP-6 is still in progress in the ledger; this document claims no verification of that packet.
+The pager is the voice of the game: `tutorial_director.gd` surfaces move/swing at spawn, then evade, tape, skates, grind and turret-reading hints as each becomes relevant. Music and SFX have their own buses (music -8 dB); tapes resume their position and crossfade on switch; cues exist for swing, hit, hurt, jump, land, evade, grind, pickup, kill, clack, level-up and pager. Merged and covered by `tests/test_onboarding.gd`. Nobody has yet listened to the mix; that is a playtest item.
 
 ---
 
@@ -82,9 +82,10 @@ Intended behavior: onboarding hints via the pager; music/SFX buses; tape resume.
 
 Mirror of the Director ledger's outstanding work and deferred scope:
 
-- Finish and verify WP-6 onboarding/audio after its first hint test failed in the initial attempt; land the packet and verify the integrated slice.
-- Human taste decisions remain open: walking speed versus the skate upgrade, perspective versus orthographic camera, and whether dormant NPC/dialogue belongs in the slice. The closer camera also increases pillar occlusion concerns.
+- Must fix before showing people: a human audio pass (all SFX are procedural 8-bit, verified only by signal tests; the music/SFX mix is a guess), a mouse-and-keyboard playtest in a real window (aim, skate turn feel, grind entry tolerance are tuned to numbers), and a decision on whether death should keep respawning the whole enemy roster.
+- Should fix: pillar fade when pillars occlude the player, 4.5 m north/west perimeter walls, placeholder roach/cicada silhouettes, camera occlusion at the mezzanine edge, no paused visual while the character sheet is open, dormant native NPC/enemy classes, Windows debug DLL only.
+- Open taste decisions for Anthony: camera distance (12 m vs 16 m), walk-vs-skate contrast, SFX character and mix, death respawn policy, roach pack size.
 - Deferred beyond Vertical Slice 1: new enemies, weapons and biomes; NPC/dialogue content; tape splicing; controller support. These are outside the slice's definition of done.
 - Existing dummy-renderer/teardown diagnostics and the legacy save-test skip remain verification limits recorded by WP-7; passing test gates do not assert warning-free output.
 
-*Updated October 7, 2026. Current behavior follows the ledger's verified entries; WP-6 behavior is explicitly intended and unverified here.*
+*Updated October 7, 2026. Reflects Vertical Slice 1 as merged on `main` (all eight definition-of-done criteria, 18/18 headless suites).*

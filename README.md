@@ -8,7 +8,7 @@ Windows x86_64 is the supported platform for now. The extension manifest has no 
 
 Start a fresh run in the Flooded Mall, fight telegraphed cicada lunges, roach pounces and kiosk mortars, earn XP and spend stat points. Skate, enter aligned grind rails and land a dismount slam; Bio-Stabilizers save checkpoint progression for death respawns and Continue. Entering the north arena awakens the three-phase Dial-Up Queen (1500 HP). Queen defeat shows a victory card, records completion and returns to the menu. The native soldier/dialogue system is dormant in this slice.
 
-The ledger records merged critical-path, movement/combat, presentation, encounter, test-harness and end-to-end work. WP-6 is landing separately: intended behavior is onboarding hints via the pager; music/SFX buses; tape resume. Its verification is not claimed here.
+The pager teaches movement, swinging, evade, tapes, skates, grinding and turret reading as each becomes relevant. Music and SFX run on separate buses; tapes resume where they left off and crossfade when switched. All of this is merged on `main` and covered by the 18-suite headless test gate.
 
 ## Getting Started
 
@@ -54,13 +54,13 @@ SCons builds the bindings and `bin/libbiopunk.windows.template_debug.x86_64.dll`
 ## Run the Tests
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1 -GodotBin C:/tools/Godot_v4.3-stable_win64.exe
+powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1
 ```
 
-Set `-GodotBin` to your downloaded executable. It can be omitted when the engine is available at the runner's local default location. The runner discovers headless tests, checks failures and exit codes, and saves output in `ops/runs/tests/`. To run one test:
+The runner looks for `Godot_v4.3-stable_win64.exe` at the repository root (gitignored); pass `-GodotBin <path>` if it lives elsewhere. The runner discovers headless tests, checks failures and exit codes, and saves output in `ops/runs/tests/`. To run one test:
 
 ```powershell
-& C:/tools/Godot_v4.3-stable_win64.exe --headless --path . -s tests/test_slice_e2e.gd
+./Godot_v4.3-stable_win64.exe --headless --path . -s tests/test_slice_e2e.gd
 ```
 
 A passing suite verifies scripted behavior; existing teardown/dummy-renderer diagnostics and a legacy save-test skip are documented in the WP-7 report. It does not certify a visual/audio playtest.

@@ -46,7 +46,7 @@ What is genuinely good (protect): the traversal fantasy (skate glide → rail �
 | WP-5 test harness | honest exit codes, no crashes, isolated save, runner | Gemini 3.8 Flash | Merged + Director runner fixes. |
 | WP-6 onboarding/audio | pager tutorial, buses, tape resume/crossfade, cues | Gemini 3.1 Pro → Claude Sonnet 5.5 (both ran out of Antigravity quota) | Merged; Director finished the last 1% (TestUtil preload). |
 | WP-7 e2e + balance | whole-loop test, balance table, duplicate-signal fix | Codex medium | Merged; Director applied HP tuning from its table. |
-| WP-8 docs | AGENTS/README/SYNOPSIS true again | Codex low | running (wt wp8) at time of writing |
+| WP-8 docs | AGENTS/README/SYNOPSIS true again | Codex low | Merged + Director fix-up (branch predated the WP-6 merge, so WP-6 was described as unverified and two tests were missing; corrected). First launch hung 80 min reading stdin — always launch `codex exec` with `< /dev/null` from a background shell. |
 
 Director-authored changes: camera arm 16→12 m / FOV 45; boss gate moved to z −19; builder as runtime source of truth + lighting tune + player fill light; HP label outline; cicada flash tone; roach 45 / cicada 70 / Queen 1500 HP; first-contact cicadas 3.5 m further out; `tests/test_critical_path.gd`, `tests/test_menu_flow.gd`; runner process handling; all merges.
 
@@ -71,7 +71,7 @@ Director-authored changes: camera arm 16→12 m / FOV 45; boss gate moved to z �
 7. The character sheet locks input but has no "paused" visual; enemies keep moving while it is open.
 8. The dormant C++ `StrandedSoldierNPC` / `MutatedBugEnemy` and the dialogue UI are unreferenced; delete or port to 3D in a later slice.
 9. Only a Windows debug DLL ships; no release build, no Linux manifest entry.
-10. `AGENTS.md` camera/jump numbers are stale until WP-8 lands.
+10. README lost its feature overview in WP-8 (the old one was stale); worth a short, correct Features section later.
 
 **Deliberately deferred** (out of slice scope by Director ruling)
 - Tape splicing, new enemies/weapons/biomes, controller support, NPC dialogue in 3D, save slots.
@@ -81,7 +81,7 @@ See the playtest checklist in the final report. Candidates: camera distance (12 
 
 ## Machine-state changes made by the Director
 - 2026-10-07 15:48: `HKCU\Software\Microsoft\Windows\Windows Error Reporting\DontShowUI = 1` (was unset) so Godot crash-at-exit dialogs from headless tests stop popping. Revert with `Remove-ItemProperty` if unwanted.
-- Worktrees under `.worktrees/` (gitignored); merged ones removed. `wp6` directory is a stale copy (locked during cleanup) and `wp8` is live.
+- Worktrees under `.worktrees/` (gitignored); all merged and removed except a stale `wp6` directory copy (locked during cleanup; safe to delete).
 
 ## Baseline facts for the next director
 - Build: `py -3 -m SCons platform=windows target=template_debug -j8` (never with a Godot instance open from the same checkout).

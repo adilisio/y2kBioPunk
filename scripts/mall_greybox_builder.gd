@@ -38,6 +38,13 @@ func _ready() -> void:
 			_spawn_enemies(enemies_node)
 		_connect_runtime_rails()
 
+	if not Engine.is_editor_hint():
+		var p = get_node_or_null("../Player")
+		if not p:
+			p = get_tree().current_scene.find_child("Player", true, false) if get_tree() and get_tree().current_scene else null
+		if p:
+			p.add_to_group("player")
+
 func _clear_existing_geometry() -> void:
 	var existing = get_node_or_null("LevelGeometry")
 	if existing:
@@ -222,11 +229,10 @@ func _spawn_enemies(enemies_container: Node3D = null) -> void:
 	if not container:
 		return
 
-	# 1. Spawn Cicadas if scene is available
 	var scene_to_spawn = cicada_scene
 	if not scene_to_spawn:
-		if ResourceLoader.exists("res://neon_cicada.tscn"):
-			scene_to_spawn = load("res://neon_cicada.tscn")
+		if ResourceLoader.exists("res://scenes/neon_cicada.tscn"):
+			scene_to_spawn = load("res://scenes/neon_cicada.tscn")
 
 	if scene_to_spawn and scene_to_spawn.can_instantiate():
 		var spawn_points: Array[Vector3] = [
@@ -252,8 +258,6 @@ func _spawn_enemies(enemies_container: Node3D = null) -> void:
 
 	# 2. Spawn Corrupted Kiosk Turrets near derelict kiosks
 	var turret_script_res = load("res://scripts/corrupted_kiosk_turret.gd") if ResourceLoader.exists("res://scripts/corrupted_kiosk_turret.gd") else null
-	if not turret_script_res and ResourceLoader.exists("res://corrupted_kiosk_turret.gd"):
-		turret_script_res = load("res://corrupted_kiosk_turret.gd")
 	if turret_script_res:
 		var turret_positions: Array[Vector3] = [
 			Vector3(-6.0, 1.0, -13.5),
@@ -269,13 +273,11 @@ func _spawn_enemies(enemies_container: Node3D = null) -> void:
 
 	# 3. Spawn Sludge Roaches swarming near the Sunken Atrium Basin
 	var roach_script_res = load("res://scripts/sludge_roach.gd") if ResourceLoader.exists("res://scripts/sludge_roach.gd") else null
-	if not roach_script_res and ResourceLoader.exists("res://sludge_roach.gd"):
-		roach_script_res = load("res://sludge_roach.gd")
 	if roach_script_res:
 		var roach_positions: Array[Vector3] = [
-			Vector3(1.0, 0.5, -1.0),
-			Vector3(-2.0, 0.5, 2.0),
-			Vector3(3.5, 0.5, 3.0)
+			Vector3(1.0, 0.5, -8.0),
+			Vector3(-2.0, 0.5, -9.0),
+			Vector3(3.5, 0.5, -7.0)
 		]
 		for k in range(roach_positions.size()):
 			var roach = roach_script_res.new()

@@ -112,8 +112,8 @@ y2k-biopunk-rpg/
 ├── scenes/                     # Godot scenes, 3D models, textures, animations
 │   ├── FloodedMall_Greybox.tscn
 │   ├── intro.tscn
-│   ├── main.tscn
 │   ├── main_menu.tscn
+│   ├── neon_cicada.tscn
 │   ├── player.tscn
 │   └── Meshy_AI_biopunk_delinquent_*.glb
 │

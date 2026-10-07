@@ -87,11 +87,7 @@ func get_remaining_enemies_count() -> int:
 	return count
 
 func _process(_delta: float) -> void:
-	if triggered:
-		return
-	if player_inside:
-		if get_remaining_enemies_count() == 0:
-			_spawn_boss()
+	pass
 
 func _on_body_entered(body: Node3D) -> void:
 	if triggered:
@@ -101,10 +97,19 @@ func _on_body_entered(body: Node3D) -> void:
 
 	player_inside = true
 	var remaining: int = get_remaining_enemies_count()
-	if remaining == 0:
-		_spawn_boss()
-	else:
-		print("[BossTrigger] Atrium bio-hazard quarantine active! Defeat all remaining %d enemies to summon Dial-Up Queen." % remaining)
+	
+	var tree: SceneTree = get_tree()
+	if not tree:
+		tree = Engine.get_main_loop() as SceneTree
+	var hud = tree.get_first_node_in_group("hud") if tree else null
+	if not hud and tree and tree.current_scene:
+		hud = tree.current_scene.find_child("HUD", true, false)
+		
+	if remaining > 0:
+		if hud and hud.has_method("show_message"):
+			hud.call("show_message", "[color=#ff2222][b]QUARANTINE BREACH // DIAL-UP QUEEN AWAKENS[/b][/color]")
+
+	_spawn_boss()
 
 func _on_body_exited(body: Node3D) -> void:
 	if not _is_player(body):
@@ -114,16 +119,13 @@ func _on_body_exited(body: Node3D) -> void:
 func _spawn_boss() -> void:
 	if triggered:
 		return
-	triggered = true
-	print("[BossTrigger] All atrium bio-threats eliminated! Awakening Dial-Up Queen...")
+	print("[BossTrigger] Awakening Dial-Up Queen...")
 
 	var boss: Node3D = null
 	if boss_scene and boss_scene.can_instantiate():
 		boss = boss_scene.instantiate()
 	else:
 		var script = load("res://scripts/dial_up_queen.gd")
-		if not script and ResourceLoader.exists("res://dial_up_queen.gd"):
-			script = load("res://dial_up_queen.gd")
 		if script:
 			boss = CharacterBody3D.new()
 			boss.set_script(script)
@@ -144,6 +146,9 @@ func _spawn_boss() -> void:
 			hud = tree.current_scene.find_child("HUD", true, false)
 		if hud and hud.has_method("setup_boss_bar"):
 			hud.call("setup_boss_bar", boss)
+		
+		boss.add_to_group("boss")
+		triggered = true
 
 	if trigger_once:
 		monitoring = false

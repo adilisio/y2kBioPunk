@@ -256,17 +256,19 @@ func _apply_squash_and_stretch() -> void:
 		hit_tween.tween_property(visual_mesh, "scale", Vector3(0.8, 0.4, 1.3), 0.1)
 
 func _apply_knockback(override_dir: Vector3 = Vector3.ZERO) -> void:
-	var dir = override_dir
-	if dir == Vector3.ZERO:
+	var impulse = 10.0 # Fragile roach gets launched back
+	if override_dir != Vector3.ZERO:
+		knockback_velocity = override_dir.normalized() * impulse * clampf(override_dir.length(), 1.0, 1.6)
+	else:
+		var dir = Vector3.ZERO
 		if target_player and is_instance_valid(target_player):
 			var away = global_position - target_player.global_position
 			away.y = 0.0
 			dir = away.normalized() if away.length_squared() > 0.001 else -transform.basis.z
 		else:
 			dir = -transform.basis.z
+		knockback_velocity = dir * impulse
 
-	var impulse = 10.0 # Fragile roach gets launched back
-	knockback_velocity = dir * impulse
 	knockback_timer = 0.22
 
 func _build_visuals() -> void:
@@ -297,4 +299,14 @@ func _build_visuals() -> void:
 
 func _die() -> void:
 	print("[SludgeRoach] %s squashed! Sludge splattered." % name)
-	queue_free()
+	var tree = get_tree()
+	if tree:
+		var p = tree.get_first_node_in_group("player")
+		if not p and tree.current_scene:
+			p = tree.current_scene.find_child("Player", true, false)
+		if p and p.has_method("gain_xp"):
+			p.call("gain_xp", 15)
+
+	var tween = create_tween()
+	tween.tween_property(self, "scale", Vector3.ZERO, 0.15)
+	tween.tween_callback(queue_free)

@@ -97,7 +97,7 @@ text = "NEW GAME"
 custom_minimum_size = Vector2(260, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
-text = "LOAD GAME"
+text = "CONTINUE"
 
 [node name="OptionsButton" type="Button" parent="VBoxContainer"]
 custom_minimum_size = Vector2(260, 44)

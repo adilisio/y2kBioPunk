@@ -234,8 +234,11 @@ func _apply_squash_and_stretch() -> void:
 		hit_tween.tween_property(visual_mesh, "scale", Vector3.ONE, 0.12)
 
 func _apply_knockback(override_dir: Vector3 = Vector3.ZERO) -> void:
-	var dir = override_dir
-	if dir == Vector3.ZERO:
+	var knockback_impulse: float = 7.5
+	if override_dir != Vector3.ZERO:
+		knockback_velocity = override_dir.normalized() * knockback_impulse * clampf(override_dir.length(), 1.0, 1.6)
+	else:
+		var dir = Vector3.ZERO
 		if target_player and is_instance_valid(target_player):
 			var away = global_position - target_player.global_position
 			away.y = 0.0
@@ -243,9 +246,8 @@ func _apply_knockback(override_dir: Vector3 = Vector3.ZERO) -> void:
 				dir = away.normalized()
 		if dir == Vector3.ZERO:
 			dir = -transform.basis.z
+		knockback_velocity = dir * knockback_impulse
 
-	var knockback_impulse: float = 7.5
-	knockback_velocity = dir * knockback_impulse
 	knockback_timer = 0.25
 	velocity.x = knockback_velocity.x
 	velocity.z = knockback_velocity.z
@@ -255,4 +257,14 @@ func _apply_knockback(override_dir: Vector3 = Vector3.ZERO) -> void:
 
 func _die() -> void:
 	print("[NeonDialUpCicada] %s was defeated! Dial-up carrier frequency severed." % name)
-	queue_free()
+	var tree = get_tree()
+	if tree:
+		var p = tree.get_first_node_in_group("player")
+		if not p and tree.current_scene:
+			p = tree.current_scene.find_child("Player", true, false)
+		if p and p.has_method("gain_xp"):
+			p.call("gain_xp", 10)
+
+	var tween = create_tween()
+	tween.tween_property(self, "scale", Vector3.ZERO, 0.15)
+	tween.tween_callback(queue_free)

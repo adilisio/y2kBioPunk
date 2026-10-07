@@ -270,8 +270,17 @@ func _ready() -> void:
 			if sm_script:
 				sm = sm_script.new()
 				get_tree().root.add_child(sm)
-		if sm and sm.has_method("has_save_data") and sm.call("has_save_data"):
-			sm.call("apply_save_data_to_player", player)
+		if sm:
+			var do_load = false
+			if sm.get("pending_load"):
+				do_load = true
+				sm.set("pending_load", false)
+			elif sm.get("respawn_pending"):
+				do_load = true
+				sm.set("respawn_pending", false)
+				
+			if do_load and sm.has_method("has_save_data") and sm.call("has_save_data"):
+				sm.call("apply_save_data_to_player", player)
 
 		if player.has_signal("health_changed"):
 			player.connect("health_changed", Callable(self, "_on_health_changed"))
@@ -487,8 +496,8 @@ func _on_player_died() -> void:
 	if control_tip:
 		control_tip.text = "[color=#ff4444][b]NEURAL LINK LOST. RESTORING CLONE FROM BIO-STABILIZER...[/b][/color]"
 	var sm = get_node_or_null("/root/SaveManager")
-	if sm and sm.has_method("save_player_data") and player:
-		sm.call("save_player_data", player, "PlayerDeath_Stabilizer")
+	if sm:
+		sm.set("respawn_pending", true)
 
 func _on_xp_changed(cur_xp: int, req_xp: int, lvl: int) -> void:
 	if xp_bar:
@@ -501,8 +510,50 @@ func _on_xp_changed(cur_xp: int, req_xp: int, lvl: int) -> void:
 
 func _on_leveled_up(new_lvl: int, unspent_pts: int) -> void:
 	print("[Y2K-HUD] *** LEVEL UP! *** Reached Level %d! Unspent Points: %d" % [new_lvl, unspent_pts])
+	if control_tip:
+		control_tip.text = "[color=#ffdd44][b]LEVEL UP! BIO-SYNTHESIS COMPLETE. PRESS [C] TO ALLOCATE.[/b][/color]"
 	_refresh_hud()
 	_refresh_character_sheet()
+
+func show_message(msg: String) -> void:
+	if control_tip:
+		control_tip.text = msg
+
+func show_victory_card() -> void:
+	var lvl = player.call("get_level") if player and player.has_method("get_level") else 1
+	var vic = PanelContainer.new()
+	vic.set_anchors_preset(Control.PRESET_CENTER)
+	vic.anchor_left = 0.5
+	vic.anchor_top = 0.5
+	vic.anchor_right = 0.5
+	vic.anchor_bottom = 0.5
+	vic.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	vic.grow_vertical = Control.GROW_DIRECTION_BOTH
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.02, 0.08, 0.04, 0.95)
+	style.border_color = Color(0.2, 1.0, 0.2, 1.0)
+	style.set_border_width_all(4)
+	vic.add_theme_stylebox_override("panel", style)
+	
+	var lbl = RichTextLabel.new()
+	lbl.bbcode_enabled = true
+	lbl.fit_content = true
+	lbl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	lbl.text = "[center][b][color=#39ff14]SIGNAL RESTORED // MALL QUARANTINE LIFTED[/color][/b]\n\n[color=#ffffff]LEVEL: %d\nSTATUS: SURVIVED[/color][/center]" % lvl
+	
+	var margin = MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 40)
+	margin.add_theme_constant_override("margin_right", 40)
+	margin.add_theme_constant_override("margin_top", 40)
+	margin.add_theme_constant_override("margin_bottom", 40)
+	
+	margin.add_child(lbl)
+	vic.add_child(margin)
+	
+	var overlay = get_node_or_null("HUDOverlay")
+	if overlay:
+		overlay.add_child(vic)
 
 func _on_stat_point_spent(_stat_name: String, _remaining: int) -> void:
 	_refresh_hud()
@@ -533,12 +584,16 @@ func toggle_character_sheet() -> void:
 	if not character_sheet:
 		return
 	character_sheet.visible = not character_sheet.visible
+	if player and player.has_method("set_movement_locked"):
+		player.call("set_movement_locked", character_sheet.visible)
 	if character_sheet.visible:
 		_refresh_character_sheet()
 
 func _on_close_sheet_pressed() -> void:
 	if character_sheet:
 		character_sheet.visible = false
+	if player and player.has_method("set_movement_locked"):
+		player.call("set_movement_locked", false)
 
 func _on_spend_stat(stat_name: String) -> void:
 	if not player:

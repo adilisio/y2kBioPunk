@@ -83,6 +83,16 @@ void PlayerController::_ready() {
 		process_animation();
 	}
 
+	if (visuals) {
+		skin_meshes = visuals->find_children("Mesh_*", "MeshInstance3D", true, false);
+		for (int i = 0; i < skin_meshes.size(); ++i) {
+			MeshInstance3D *mesh = Object::cast_to<MeshInstance3D>(skin_meshes[i]);
+			skin_overlays.append(mesh->get_material_overlay());
+		}
+	}
+	hurt_overlay.instantiate();
+	hurt_overlay->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
+
 	// Retrieve FlamethrowerParticles node (child of Visuals)
 	flame_particles = Object::cast_to<GPUParticles3D>(find_child("FlamethrowerParticles", true, false));
 	if (!flame_particles && visuals) {
@@ -334,8 +344,34 @@ void PlayerController::_physics_process(double p_delta) {
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
 	}
+	Vector3 change = get_velocity() - observed_velocity;
+	change.y = 0;
+	// Honor external velocity shoves instead of overwriting them on the next tick.
+	if (change.length_squared() > 0.01f && current_state != STATE_GRINDING) {
+		knockback_timer = Math::max(knockback_timer, 0.12f);
+	}
+	step_physics(p_delta);
+	observed_velocity = get_velocity();
+}
+
+void PlayerController::step_physics(double p_delta) {
+	if (Engine::get_singleton()->is_editor_hint()) {
+		return;
+	}
 
 	float delta_f = static_cast<float>(p_delta);
+	hurt_invuln_timer = Math::max(0.0f, hurt_invuln_timer - delta_f);
+	if (hurt_flash_timer > 0.0f) {
+		hurt_flash_timer = Math::max(0.0f, hurt_flash_timer - delta_f);
+		hurt_overlay->set_albedo(hurt_flash_timer > 0.10f ? Color(1, 1, 1) : Color(1, 0.1f, 0.1f));
+		for (int i = 0; i < skin_meshes.size(); ++i) {
+			MeshInstance3D *mesh = Object::cast_to<MeshInstance3D>(skin_meshes[i]);
+			if (hurt_flash_timer <= 0) {
+				Ref<Material> original = skin_overlays[i];
+				mesh->set_material_overlay(original);
+			}
+		}
+	}
 
 	if (current_state == STATE_DEAD) {
 		set_velocity(Vector3(0.0f, 0.0f, 0.0f));
@@ -743,7 +779,9 @@ void PlayerController::_physics_process(double p_delta) {
 	Vector3 hv(current_velocity.x, 0, current_velocity.z);
 	bool skating = is_skating || is_equipped_skates;
 	bool has_input = move_direction.length_squared() > 0.0001f;
-	if (!is_on_floor()) {
+	if (knockback_timer > 0) {
+		knockback_timer = Math::max(0.0f, knockback_timer - delta_f);
+	} else if (!is_on_floor()) {
 		if (has_input) {
 			hv = hv.move_toward(move_direction * speed, 20.0f * delta_f);
 		}
@@ -766,7 +804,7 @@ void PlayerController::_physics_process(double p_delta) {
 	}
 	if (lunge_timer > 0.0f) {
 		lunge_timer -= delta_f;
-		hv += facing_direction * 4.0f;
+		hv = move_direction * speed + facing_direction * 4.0f;
 	}
 	current_velocity.x = hv.x;
 	current_velocity.z = hv.z;
@@ -1673,17 +1711,31 @@ void PlayerController::set_current_tape(const String &p_tape) {
 	switch_tape(p_tape);
 }
 
-void PlayerController::take_damage(float p_amount) {
-	if (current_state == STATE_DEAD) {
+void PlayerController::take_damage(float p_amount, const Vector3 &p_knockback) {
+	if (current_state == STATE_DEAD || is_invincible || hurt_invuln_timer > 0 || p_amount <= 0) {
 		return;
 	}
-	if (is_invincible || current_state == STATE_EVADING) {
-		UtilityFunctions::print("[Y2K-COMBAT] Evaded attack! (Invincibility frames active)");
-		return;
+	current_health = Math::max(0.0f, current_health - p_amount);
+	hurt_invuln_timer = 0.6f;
+	hurt_flash_timer = 0.18f;
+	if (hurt_overlay.is_valid()) {
+		hurt_overlay->set_albedo(Color(1, 1, 1));
+		for (int i = 0; i < skin_meshes.size(); ++i) {
+			Object::cast_to<MeshInstance3D>(skin_meshes[i])->set_material_overlay(hurt_overlay);
+		}
 	}
-	current_health = UtilityFunctions::maxf(0.0f, current_health - p_amount);
+	Vector3 direction = p_knockback;
+	direction.y = 0;
+	if (direction.length_squared() > 0.001f) {
+		Vector3 velocity = direction.normalized() * 7.0f;
+		velocity.y = get_velocity().y;
+		set_velocity(velocity);
+		knockback_timer = 0.12f;
+	}
+	play_sfx("hurt");
+	add_camera_trauma(0.45f);
+	emit_signal("player_hurt", p_amount);
 	emit_signal("health_changed", current_health, max_health);
-
 	if (current_health <= 0.0f) {
 		die();
 	}
@@ -2714,7 +2766,7 @@ void PlayerController::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "is_attacking"), "set_is_attacking", "get_is_attacking");
 
 	ClassDB::bind_method(D_METHOD("attack"), &PlayerController::attack);
-	ClassDB::bind_method(D_METHOD("take_damage", "amount"), &PlayerController::take_damage);
+	ClassDB::bind_method(D_METHOD("take_damage", "amount", "knockback"), &PlayerController::take_damage, DEFVAL(Vector3()));
 	ClassDB::bind_method(D_METHOD("heal", "amount"), &PlayerController::heal);
 
 	// Walkman System
@@ -2798,6 +2850,7 @@ void PlayerController::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("play_sfx", "name"), &PlayerController::play_sfx);
 
 	// Signals
+	ADD_SIGNAL(MethodInfo("player_hurt", PropertyInfo(Variant::FLOAT, "amount")));
 	ADD_SIGNAL(MethodInfo("attack_executed", PropertyInfo(Variant::FLOAT, "damage")));
 	ADD_SIGNAL(MethodInfo("health_changed", PropertyInfo(Variant::FLOAT, "current_health"), PropertyInfo(Variant::FLOAT, "max_health")));
 	ADD_SIGNAL(MethodInfo("stats_changed"));

@@ -133,6 +133,13 @@ private:
 	bool combo_buffered = false;
 	uint64_t hit_stop_end_msec = 0;
 	double previous_time_scale = 1.0;
+	float hurt_invuln_timer = 0.0f;
+	float hurt_flash_timer = 0.0f;
+	float knockback_timer = 0.0f;
+	Vector3 observed_velocity;
+	Array skin_meshes;
+	Array skin_overlays;
+	Ref<StandardMaterial3D> hurt_overlay;
 	float base_attack_damage = 15.0f;
 	float attack_reach = 2.5f;
 	bool is_attacking = false;
@@ -159,6 +166,7 @@ private:
 	void start_combo_hit(int p_hit);
 	void hit_stop(float p_duration);
 	void add_camera_trauma(float p_amount);
+	void step_physics(double p_delta);
 
 protected:
 	static void _bind_methods();
@@ -231,7 +239,7 @@ public:
 	bool get_is_attacking() const;
 	void set_is_attacking(bool p_attacking);
 	void attack();
-	void take_damage(float p_amount);
+	void take_damage(float p_amount, const Vector3 &p_knockback = Vector3());
 	void heal(float p_amount);
 	Area3D *get_attack_sensor() const;
 	void set_attack_sensor(Area3D *p_sensor);

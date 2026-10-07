@@ -79,15 +79,7 @@ void IntroController::transition_to_main_menu() {
 	UtilityFunctions::print("[Y2K-INTRO] Transitioning to Main Menu (", target_menu_scene, ")...");
 	SceneTree *tree = get_tree();
 	if (tree) {
-		String scene_path = target_menu_scene;
-		if (!FileAccess::file_exists(scene_path)) {
-			if (FileAccess::file_exists("res://main_menu.tscn")) {
-				scene_path = "res://main_menu.tscn";
-			} else if (FileAccess::file_exists("res://scenes/main_menu.tscn")) {
-				scene_path = "res://scenes/main_menu.tscn";
-			}
-		}
-		tree->change_scene_to_file(scene_path);
+		tree->change_scene_to_file("res://scenes/main_menu.tscn");
 	}
 }
 

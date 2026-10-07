@@ -11,10 +11,17 @@ signal game_loaded(data: Dictionary)
 const SAVE_PATH: String = "user://y2k_save_data.json"
 
 var cached_save_data: Dictionary = {}
+var pending_load: bool = false
+var respawn_pending: bool = false
 
 func _ready() -> void:
 	if has_save_data():
 		cached_save_data = load_player_data()
+
+func clear_save() -> void:
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(SAVE_PATH)
+	cached_save_data.clear()
 
 func has_save_data() -> bool:
 	return FileAccess.file_exists(SAVE_PATH)
@@ -114,7 +121,12 @@ func apply_save_data_to_player(player: Node, save_data: Dictionary = {}) -> bool
 	if p_data.has("current_xp") and player.has_method("set_current_xp"):
 		player.call("set_current_xp", int(p_data["current_xp"]))
 	if p_data.has("xp_to_level") and player.has_method("set_xp_to_level"):
-		player.call("set_xp_to_level", int(p_data["xp_to_level"]))
+		var lvl = int(p_data.get("level", 1))
+		var expected_xp = int(50 * pow(1.5, lvl - 1))
+		var stored_xp = int(p_data["xp_to_level"])
+		if stored_xp < expected_xp:
+			stored_xp = expected_xp
+		player.call("set_xp_to_level", stored_xp)
 	if p_data.has("unspent_stat_points") and player.has_method("set_unspent_stat_points"):
 		player.call("set_unspent_stat_points", int(p_data["unspent_stat_points"]))
 
@@ -129,6 +141,9 @@ func apply_save_data_to_player(player: Node, save_data: Dictionary = {}) -> bool
 
 	if p_data.has("current_tape") and player.has_method("switch_tape"):
 		player.call("switch_tape", str(p_data["current_tape"]))
+		
+	if player.has_method("get_max_health") and player.has_method("set_current_health"):
+		player.call("set_current_health", player.call("get_max_health"))
 
 	if data.has("checkpoint_position") and player is Node3D:
 		var pos_dict = data["checkpoint_position"]

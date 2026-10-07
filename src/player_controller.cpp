@@ -52,12 +52,6 @@ void PlayerController::_ready() {
 	set_motion_mode(MOTION_MODE_GROUNDED);
 	set_collision_layer(1 | 2);
 
-	// Retrieve project default gravity
-	ProjectSettings *settings = ProjectSettings::get_singleton();
-	if (settings && settings->has_setting("physics/3d/default_gravity")) {
-		gravity = static_cast<float>(settings->get_setting("physics/3d/default_gravity", 9.8f));
-	}
-
 	// Retrieve Visuals node
 	visuals = Object::cast_to<Node3D>(get_node_or_null("Visuals"));
 	if (!visuals) {
@@ -352,6 +346,14 @@ void PlayerController::_physics_process(double p_delta) {
 		return;
 	}
 
+	Input *jump_input = Input::get_singleton();
+	coyote_timer = is_on_floor() ? 0.10f : Math::max(0.0f, coyote_timer - delta_f);
+	jump_buffer_timer = Math::max(0.0f, jump_buffer_timer - delta_f);
+	recent_jump_timer = Math::max(0.0f, recent_jump_timer - delta_f);
+	if (jump_input && jump_input->is_action_just_pressed("jump")) {
+		jump_buffer_timer = 0.12f;
+		recent_jump_timer = 0.15f;
+	}
 	Vector3 current_velocity = get_velocity();
 
 	// Update cooldowns
@@ -565,7 +567,7 @@ void PlayerController::_physics_process(double p_delta) {
 		current_velocity.x = evade_direction.x * evade_speed;
 		current_velocity.z = evade_direction.z * evade_speed;
 		if (!is_on_floor()) {
-			current_velocity.y -= gravity * delta_f;
+			current_velocity.y -= (current_velocity.y < 0 ? fall_gravity : gravity) * delta_f;
 		}
 
 		set_velocity(current_velocity);
@@ -592,7 +594,7 @@ void PlayerController::_physics_process(double p_delta) {
 
 	// 1. Apply gravity: If not on floor, subtract gravity * delta from velocity.y
 	if (!is_on_floor()) {
-		current_velocity.y -= gravity * delta_f;
+		current_velocity.y -= (current_velocity.y < 0 ? fall_gravity : gravity) * delta_f;
 		if (current_state == STATE_NORMAL && !is_attacking) {
 			current_state = STATE_AIRBORNE;
 		}
@@ -665,20 +667,13 @@ void PlayerController::_physics_process(double p_delta) {
 			}
 		}
 
-		// Jump Mechanic: Check if character is_on_floor() and jump input is pressed
-		bool has_jump = input_map && input_map->has_action("jump");
-		bool jump_pressed = false;
-		if (has_jump) {
-			jump_pressed = input->is_action_just_pressed("jump");
-		} else if (input_map && input_map->has_action("ui_accept")) {
-			jump_pressed = input->is_action_just_pressed("ui_accept");
-		} else {
-			jump_pressed = input->is_action_just_pressed("jump");
-		}
-		if (jump_pressed && is_on_floor() && !is_attacking && current_state != STATE_GRINDING) {
+		if (jump_buffer_timer > 0 && coyote_timer > 0 && !is_attacking) {
 			current_velocity.y = jump_velocity;
+			jump_buffer_timer = coyote_timer = 0.0f;
 			current_state = STATE_AIRBORNE;
-			UtilityFunctions::print("[Y2K-MOVEMENT] Jump triggered! Initial Y velocity: ", jump_velocity);
+		}
+		if (input->is_action_just_released("jump") && current_velocity.y > 0) {
+			current_velocity.y *= 0.5f;
 		}
 
 		// Evade / Power-Slide Trigger
@@ -760,22 +755,33 @@ void PlayerController::_physics_process(double p_delta) {
 		}
 	}
 
-	// 4. Apply the direction to the character's velocity vector, using skate_speed if is_skating is true, otherwise standard walk speed
-	float speed = is_skating ? skate_speed : get_movement_speed();
+	float speed = get_movement_speed();
+	Vector3 hv(current_velocity.x, 0, current_velocity.z);
+	bool skating = is_skating || is_equipped_skates;
+	bool has_input = move_direction.length_squared() > 0.0001f;
 	if (!is_on_floor()) {
-		// Airborne: maintain horizontal momentum while allowing air steering
-		if (move_direction.length_squared() > 0.0001f) {
-			current_velocity.x = Math::lerp(current_velocity.x, move_direction.x * speed, 6.0f * delta_f);
-			current_velocity.z = Math::lerp(current_velocity.z, move_direction.z * speed, 6.0f * delta_f);
-		} else {
-			// Gentle air resistance preserves jump trajectory
-			current_velocity.x = Math::lerp(current_velocity.x, 0.0f, 1.0f * delta_f);
-			current_velocity.z = Math::lerp(current_velocity.z, 0.0f, 1.0f * delta_f);
+		if (has_input) {
+			hv = hv.move_toward(move_direction * speed, 20.0f * delta_f);
 		}
+	} else if (!skating) {
+		bool braking = has_input && hv.length_squared() > 0.01f && hv.normalized().dot(move_direction) < -0.3f;
+		hv = hv.move_toward(move_direction * speed, (has_input && !braking ? 70.0f : 90.0f) * delta_f);
+	} else if (!has_input) {
+		hv = hv.move_toward(Vector3(), 4.0f * delta_f);
+	} else if (hv.length_squared() > 0.01f && hv.normalized().dot(move_direction) < -0.3f) {
+		// Brake before reversing rather than instantly flipping the skate trajectory.
+		hv = hv.move_toward(move_direction * speed, 28.0f * delta_f);
 	} else {
-		current_velocity.x = move_direction.x * speed;
-		current_velocity.z = move_direction.z * speed;
+		float h_speed = hv.length();
+		Vector3 direction = h_speed > 0.01f ? hv / h_speed : move_direction;
+		float angle = direction.signed_angle_to(move_direction, Vector3(0, 1, 0));
+		float turn_rate = Math::lerp(360.0f, 200.0f, Math::clamp((h_speed - 6.0f) / 6.0f, 0.0f, 1.0f));
+		float turn = Math::deg_to_rad(turn_rate) * delta_f;
+		direction = direction.rotated(Vector3(0, 1, 0), Math::clamp(angle, -turn, turn));
+		hv = direction * Math::move_toward(h_speed, speed, 16.0f * delta_f);
 	}
+	current_velocity.x = hv.x;
+	current_velocity.z = hv.z;
 
 	set_velocity(current_velocity);
 	move_and_slide();

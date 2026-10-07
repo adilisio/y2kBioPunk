@@ -115,9 +115,13 @@ private:
 	bool is_movement_locked = false; // Pauses movement during dialogue / menus
 	Vector3 facing_direction = Vector3(0.0f, 0.0f, 1.0f);
 	float rotation_speed = 25.0f;
-	float gravity = 9.8f;
+	float gravity = 22.0f;
+	float fall_gravity = 36.0f;
+	float coyote_timer = 0.0f;
+	float jump_buffer_timer = 0.0f;
+	float recent_jump_timer = 0.0f;
 	float base_movement_speed = 6.0f;
-	float jump_velocity = 6.0f;
+	float jump_velocity = 7.2f;
 
 	// Combat: Baseball Bat Melee Attack
 	float attack_cooldown = 0.8f;

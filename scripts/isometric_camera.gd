@@ -13,6 +13,10 @@ class_name IsometricCameraRig
 @export var offset_height: float = 1.0
 
 var camera: Camera3D = null
+var trauma: float = 0.0
+
+func add_trauma(amount: float) -> void:
+	trauma = clampf(trauma + amount, 0.0, 1.0)
 
 func _ready() -> void:
 	set_as_top_level(true)
@@ -50,6 +54,14 @@ func _physics_process(delta: float) -> void:
 			return
 
 	var target_pos = target.global_position + Vector3(0.0, offset_height, 0.0)
+	if target is CharacterBody3D:
+		var hv := Vector3(target.velocity.x, 0.0, target.velocity.z)
+		target_pos += (hv * 0.18).limit_length(2.5)
 	var t = clampf(smooth_speed * delta, 0.0, 1.0)
-	global_position = global_position.lerp(target_pos, t)
+	global_position = Vector3(lerpf(global_position.x, target_pos.x, t), lerpf(global_position.y, target_pos.y, clampf(3.0 * delta, 0.0, 1.0)), lerpf(global_position.z, target_pos.z, t))
 	rotation_degrees = Vector3(pitch_angle_deg, yaw_angle_deg, 0.0)
+	if camera:
+		var shake := trauma * trauma * 0.35
+		camera.h_offset = shake * randf_range(-1.0, 1.0)
+		camera.v_offset = shake * randf_range(-1.0, 1.0)
+	trauma = maxf(0.0, trauma - 1.8 * delta)

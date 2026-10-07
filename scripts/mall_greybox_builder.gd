@@ -236,11 +236,9 @@ func _spawn_enemies(enemies_container: Node3D = null) -> void:
 
 	if scene_to_spawn and scene_to_spawn.can_instantiate():
 		var spawn_points: Array[Vector3] = [
-			Vector3(-7.0, 3.0, -11.5),  # Roaming near BeeperWorld kiosk
-			Vector3(7.5, 3.0, -11.5),   # Roaming near NeonJulius kiosk
-			Vector3(14.5, 3.0, 4.0),    # Roaming near CassetteVault kiosk
-			Vector3(-10.0, 3.0, -2.5),  # Near Sunken Atrium west curb
-			Vector3(3.5, 3.0, 11.5)     # Near Sunken Atrium south ramp
+			Vector3(-6.0, 1.0, 6.0),
+			Vector3(6.0, 1.0, 6.0),
+			Vector3(-17.0, 2.3, 2.0)
 		]
 
 		for i in range(spawn_points.size()):
@@ -277,7 +275,8 @@ func _spawn_enemies(enemies_container: Node3D = null) -> void:
 		var roach_positions: Array[Vector3] = [
 			Vector3(1.0, 0.5, -8.0),
 			Vector3(-2.0, 0.5, -9.0),
-			Vector3(3.5, 0.5, -7.0)
+			Vector3(3.5, 0.5, -7.0),
+			Vector3(-18.0, 1.3, 1.0)
 		]
 		for k in range(roach_positions.size()):
 			var roach = roach_script_res.new()

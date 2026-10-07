@@ -9,15 +9,98 @@ var damage: int = 20
 var lifetime: float = 4.0
 var fall_gravity: float = 9.8
 var shooter: Node = null
+var impact_target := Vector3.ZERO
+var flight_time := 1.0
+var elapsed := 0.0
+var exploded := false
+var landing_marker: CSGCylinder3D
 
-func setup(spawn_pos: Vector3, init_vel: Vector3, dmg: int, source_shooter: Node = null) -> void:
+static func sound(duration: float, frequency: float, noise: float = 0.0) -> AudioStreamWAV:
+	var wav := AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_8_BITS
+	wav.mix_rate = 22050
+	var data := PackedByteArray()
+	data.resize(int(duration * wav.mix_rate))
+	for i in data.size():
+		var t := float(i) / wav.mix_rate
+		var envelope := sin(PI * t / duration) * (1.0 - t / duration)
+		var sample := (sin(TAU * frequency * t * (1.0 - 0.35 * t / duration)) * (1.0 - noise) + randf_range(-1.0, 1.0) * noise) * envelope
+		data[i] = int(clampf(sample, -1.0, 1.0) * 100.0) & 255 # signed PCM8
+	wav.data = data
+	return wav
+
+static func floor_point(owner_node: Node3D, at: Vector3) -> Vector3:
+	var query := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 3.0, at - Vector3.UP * 20.0, 1)
+	query.exclude = [owner_node.get_rid()] if owner_node is CollisionObject3D else []
+	var hit := owner_node.get_world_3d().direct_space_state.intersect_ray(query)
+	return hit.position + Vector3.UP * 0.04 if not hit.is_empty() else Vector3(at.x, 0.04, at.z)
+
+static func burst(owner_node: Node3D, color: Color, count: int, duration: float = 0.3, frequency: float = 100.0) -> void:
+	var effect := Node3D.new()
+	owner_node.get_parent().add_child(effect)
+	effect.global_position = owner_node.global_position
+	var particles := GPUParticles3D.new()
+	particles.amount = count
+	particles.one_shot = true
+	particles.explosiveness = 1.0
+	particles.lifetime = 0.45
+	var process := ParticleProcessMaterial.new()
+	process.direction = Vector3.UP
+	process.spread = 180.0
+	process.initial_velocity_min = 2.0
+	process.initial_velocity_max = 5.0
+	process.gravity = Vector3(0, -9.8, 0)
+	process.color = color
+	particles.process_material = process
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.07
+	mesh.height = 0.14
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	mesh.material = material
+	particles.draw_pass_1 = mesh
+	effect.add_child(particles)
+	var voice := AudioStreamPlayer3D.new()
+	voice.stream = sound(duration, frequency, 0.65)
+	effect.add_child(voice)
+	voice.play()
+	var cleanup := effect.create_tween()
+	cleanup.tween_interval(0.8)
+	cleanup.tween_callback(effect.queue_free)
+
+func setup(spawn_pos: Vector3, target_pos: Vector3, dmg: int, source_shooter: Node = null) -> void:
 	if is_inside_tree():
 		global_position = spawn_pos
 	else:
 		position = spawn_pos
-	velocity = init_vel
+	impact_target = target_pos
+	var horizontal := target_pos - spawn_pos
+	horizontal.y = 0.0
+	flight_time = clampf(horizontal.length() / 12.0, 0.65, 1.5)
+	velocity = (target_pos - spawn_pos) / flight_time + Vector3.UP * (0.5 * fall_gravity * flight_time)
 	damage = dmg
 	shooter = source_shooter
+	landing_marker = CSGCylinder3D.new()
+	landing_marker.radius = 2.2
+	landing_marker.height = 0.02
+	landing_marker.sides = 48
+	var mat := StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(1, 0.05, 0.02, 0.4)
+	mat.emission_enabled = true
+	mat.emission = Color.RED
+	landing_marker.material = mat
+	get_parent().add_child(landing_marker)
+	landing_marker.global_position = target_pos
+	landing_marker.scale = Vector3(0.05, 1, 0.05)
+	var tween := landing_marker.create_tween()
+	tween.tween_property(landing_marker, "scale", Vector3.ONE, flight_time)
+	var voice := AudioStreamPlayer3D.new()
+	add_child(voice)
+	voice.stream = sound(0.18, 90.0, 0.4)
+	voice.play()
 
 func _ready() -> void:
 	collision_layer = 0
@@ -46,18 +129,37 @@ func _ready() -> void:
 	add_child(col)
 
 func _physics_process(delta: float) -> void:
-	velocity.y -= fall_gravity * delta
-	global_position += velocity * delta
-	lifetime -= delta
-	if lifetime <= 0.0 or global_position.y < -2.0:
-		queue_free()
+	if exploded:
+		return
+	var step := minf(delta, flight_time - elapsed)
+	global_position += velocity * step - Vector3.UP * (0.5 * fall_gravity * step * step)
+	velocity.y -= fall_gravity * step
+	elapsed += step
+	if elapsed >= flight_time - 0.00001:
+		_explode()
 
 func _on_body_entered(body: Node) -> void:
 	if not is_instance_valid(body) or body == shooter:
 		return
-	if body.is_in_group("enemies"):
+	if body.is_in_group("enemies") or body.is_in_group("player"):
 		return
-	if body.has_method("take_damage"):
-		body.call("take_damage", damage)
-		print("[TurretMortar] Direct impact! Dealt %d damage to %s" % [damage, body.name])
+	if elapsed > 0.1:
+		_explode()
+
+func _explode() -> void:
+	if exploded:
+		return
+	exploded = true
+	if is_instance_valid(landing_marker):
+		landing_marker.queue_free()
+	for player in get_tree().get_nodes_in_group("player"):
+		var offset: Vector3 = player.global_position - global_position
+		if Vector2(offset.x, offset.z).length() <= 2.2 and absf(offset.y) <= 2.5 and player.has_method("take_damage"):
+			player.call("take_damage", damage, offset.normalized())
+	burst(self, Color(1, 0.35, 0.02), 8, 0.25, 65.0)
+	print("[TurretMortar] Splash at %s (radius 2.2m)" % global_position)
 	queue_free()
+
+func _exit_tree() -> void:
+	if is_instance_valid(landing_marker):
+		landing_marker.queue_free()

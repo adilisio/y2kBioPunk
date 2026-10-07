@@ -48,7 +48,8 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 | WP-5 | Honest test harness: exit codes, no crash at exit, isolated save path, one-command runner | Director can't trust any gate | Agy gemini-3.8-flash-high | — | S | Low | **merged** |
 | WP-3 | Presentation: WorldEnvironment glow/SSAO/fog/MSAA, color language (player green, enemies magenta/orange, interactables cyan, telegraphs red), emissive rails/kiosks, cutaway south/east walls, HUD legibility (no 0.7 scale, ≥20 px), adrenaline bar, pager messages for gate/level-up | Grey soup, unreadable enemies, tiny text | Agy gemini-3.1-pro-high | WP-1 merged | M | Low–Med | **merged** |
 | WP-4 | Encounters: roach wind-up (0.35 s), cicada contact attack, mortar ballistic solve + landing marker, queen telegraph honest radius + detonation VFX/SFX, death pop + kill SFX, enemy SFX, spawn pacing | Enemies unfair or harmless; no combat beat | Codex gpt-6.1-sol medium | WP-1 + WP-2 merged | M | Med | **merged** |
-| WP-6 | Onboarding + audio pass: pager tutorial lines (skates/evade/tape/secondary/grind) timed to first encounters; SFX for jump/land/grind/flame/disk/tape; music continues across tape switch | Nothing is taught; silence | Agy gemini-3.1-pro-high | WP-2 + WP-3 | S–M | Low | running (wt wp6) |
+| WP-6 | Onboarding + audio pass: pager tutorial lines (skates/evade/tape/secondary/grind) timed to first encounters; SFX for jump/land/grind/flame/disk/tape; music continues across tape switch | Nothing is taught; silence | Agy gemini-3.1-pro-high → claude-sonnet-5-5-high (FIX1) | WP-2 + WP-3 | S–M | Low | running (wt wp6, FIX1) |
+| WP-8 | Docs catch-up: AGENTS.md, README.md, GAME_SYNOPSIS.md made true again | Docs described a game that did not exist | Codex gpt-6.1-sol low | all merges | S | Low | running (wt wp8) |
 | WP-7 | End-to-end slice test (start→fight→level→checkpoint→die→respawn→grind→slam→boss→victory→menu) + balance table | Proves the definition of done in one run | Codex gpt-6.1-sol medium | WP-4 merged | M | Low | **merged** |
 
 ## Active work
@@ -79,6 +80,7 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 - **Director balance pass** (from WP-7's table): roach HP 30 → 45 (no longer one-shot by a normal swing; a 3rd-combo hit still kills), cicada 50 → 70, Queen 600 → 1500 (pure-DPS TTK ≈ 9–11 s + two 1.8 s transitions; with dodging ≈ 40–60 s). XP values unchanged. Tests made threshold-relative. Suite 16/16.
 
 ## Rejected / reworked
+- WP-6 (Gemini 3.1 Pro) hit its 5-hour Antigravity quota mid-packet: audio + tutorial work compiled but unverified, uncommitted, unreported; `test_onboarding.gd` failed on "first hint not shown". Director made a WIP commit (`f595c6d`) and dispatched `WP-6-FIX1` to claude-sonnet-5-5-high (Antigravity Claude/GPT bucket at 100%) to finish and verify in the same worktree.
 - WP-4 left its worktree dirty (no commits despite the brief); the Director committed the work under Codex's trailer after review. Not a quality rejection.
 - WP-3 report claimed "visual verification" but its own screenshots (`.worktrees/wp3/ops/runs/shots/wp3.*.png`) showed a near-black floor and an unlit player; the agent also left three headless Godot processes running. Accepted the structure, re-tuned the parameters myself.
 - WP-2 attempt 1 (Codex, `-s workspace-write`): no changes made; sandbox blocked git. Relaunched with `danger-full-access` in its own worktree.

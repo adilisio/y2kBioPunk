@@ -142,10 +142,10 @@ func run() -> void:
 	var queen = get_first_node_in_group("boss")
 	queen.boss_phase_transition.connect(func(phase): phases.append(phase))
 	queen.boss_defeated.connect(func(): defeated += 1)
-	queen.take_damage(210, Vector3.ZERO)
+	queen.take_damage(queen.max_health - int(queen.max_health * 0.66) + 5, Vector3.ZERO)
 	check(queen.current_phase == 2 and phases == [2], "f: phase 2 signal/state in order")
 	check(await poll(func(): return not queen.is_invulnerable, 2.5), "f: phase 2 invulnerability expires")
-	queen.take_damage(200, Vector3.ZERO)
+	queen.take_damage(int(queen.max_health * 0.66) - int(queen.max_health * 0.33) + 5, Vector3.ZERO)
 	check(queen.current_phase == 3 and phases == [2, 3], "f: phase 3 signal/state in order")
 	check(await poll(func(): return not queen.is_invulnerable, 2.5), "f: phase 3 invulnerability expires")
 	# Force the real summon state rather than depending on a random AI choice.

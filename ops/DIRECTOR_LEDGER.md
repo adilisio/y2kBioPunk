@@ -49,7 +49,7 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 | WP-3 | Presentation: WorldEnvironment glow/SSAO/fog/MSAA, color language (player green, enemies magenta/orange, interactables cyan, telegraphs red), emissive rails/kiosks, cutaway south/east walls, HUD legibility (no 0.7 scale, ≥20 px), adrenaline bar, pager messages for gate/level-up | Grey soup, unreadable enemies, tiny text | Agy gemini-3.1-pro-high | WP-1 merged | M | Low–Med | **merged** |
 | WP-4 | Encounters: roach wind-up (0.35 s), cicada contact attack, mortar ballistic solve + landing marker, queen telegraph honest radius + detonation VFX/SFX, death pop + kill SFX, enemy SFX, spawn pacing | Enemies unfair or harmless; no combat beat | Codex gpt-6.1-sol medium | WP-1 + WP-2 merged | M | Med | **merged** |
 | WP-6 | Onboarding + audio pass: pager tutorial lines (skates/evade/tape/secondary/grind) timed to first encounters; SFX for jump/land/grind/flame/disk/tape; music continues across tape switch | Nothing is taught; silence | Agy gemini-3.1-pro-high | WP-2 + WP-3 | S–M | Low | running (wt wp6) |
-| WP-7 | End-to-end slice test (start→fight→level→checkpoint→die→respawn→grind→slam→boss→victory→menu) + balance table | Proves the definition of done in one run | Codex gpt-6.1-sol medium | WP-4 merged | M | Low | running (wt wp7) |
+| WP-7 | End-to-end slice test (start→fight→level→checkpoint→die→respawn→grind→slam→boss→victory→menu) + balance table | Proves the definition of done in one run | Codex gpt-6.1-sol medium | WP-4 merged | M | Low | **merged** |
 
 ## Active work
 | Agent | Packet | Where | Started |
@@ -74,6 +74,9 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 
 - **WP-4 encounters** (Codex, medium) — merged 18:10. Roach wind-up/recovery with pack limit, cicada lunge, ballistic mortars with landing decal, honest queen telegraph (durations 1.4/1.1/0.9, radii 7/9/11), death-once guards, enemy SFX, 9-enemy roster worth 170 XP. `tests/test_encounters.gd` (29 checks) + suite 15/15 verified on main after a one-hunk merge resolution in `turret_mortar.gd` (kept Codex's ballistic step, kept WP-3's visual orientation). Shots `ops/runs/shots/wp4main.*.png`.
 - **Director: HP numbers get a dark outline** so they read on the green bar.
+
+- **WP-7 end-to-end** (Codex, medium) — merged 18:45. `tests/test_slice_e2e.gd` drives the real loop in 15 s: fresh start → kill roster (XP exact) → level 2 → spend STR → checkpoint collision save → lethal damage → scene reload → restored level/HP/position/XP/points → real rail entry via sensor → jump dismount + landing slam → real trigger → Queen phases in order with invulnerability windows → summons → defeat → minions freed → victory card → menu within 7 s → Continue visible → `slice_complete` saved. Passed 3× consecutively. Also fixed duplicate HUD signal connections. Balance table generator `ops/tools/balance_table.gd`.
+- **Director balance pass** (from WP-7's table): roach HP 30 → 45 (no longer one-shot by a normal swing; a 3rd-combo hit still kills), cicada 50 → 70, Queen 600 → 1500 (pure-DPS TTK ≈ 9–11 s + two 1.8 s transitions; with dodging ≈ 40–60 s). XP values unchanged. Tests made threshold-relative. Suite 16/16.
 
 ## Rejected / reworked
 - WP-4 left its worktree dirty (no commits despite the brief); the Director committed the work under Codex's trailer after review. Not a quality rejection.

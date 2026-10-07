@@ -19,7 +19,7 @@ enum State {
 }
 
 @export_category("Boss Stats & Thresholds")
-@export var max_health: int = 600
+@export var max_health: int = 1500
 var current_health: int = 600
 var current_phase: int = 1 # Phase 1: >66% HP, Phase 2: 33-66% HP, Phase 3: <33% HP
 

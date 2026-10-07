@@ -102,27 +102,30 @@ func run_tests() -> void:
 		received_hp.append([cur, max_hp, phase])
 	)
 
-	# Deal 50 damage
+	# Thresholds derive from max_health so balance tuning does not break this test.
+	var mh: int = queen.max_health
+	var p2_threshold: int = int(mh * 0.66)
+	var p3_threshold: int = int(mh * 0.33)
 	queen.take_damage(50)
-	check(queen.current_health == 550, "Queen HP must be 550 after 50 damage, got %d" % queen.current_health)
+	check(queen.current_health == mh - 50, "Queen HP must be max-50 after 50 damage, got %d" % queen.current_health)
 	check(received_hp.size() > 0, "boss_health_changed signal must be emitted")
 	if received_hp.size() > 0:
-		check(received_hp[-1][0] == 550, "Signal cur_hp must match 550")
+		check(received_hp[-1][0] == mh - 50, "Signal cur_hp must match max-50")
 	check(queen.current_phase == 1, "Phase must still be 1")
 
-	# Deal 160 damage -> 390 HP <= 400 HP threshold for Phase 2
-	queen.take_damage(160)
-	check(queen.current_health == 390, "Queen HP must be 390")
-	check(queen.current_phase == 2, "Queen must transition to Phase 2 at <= 400 HP")
+	# Damage down to just under the phase-2 threshold
+	queen.take_damage((mh - 50) - p2_threshold + 10)
+	check(queen.current_health == p2_threshold - 10, "Queen HP must be just under the phase-2 threshold")
+	check(queen.current_phase == 2, "Queen must transition to Phase 2 at <= 66% HP")
 
 	# Wait out phase transition invulnerability
 	queen._process_phase_transition(2.0)
 	check(not queen.is_invulnerable, "Queen must no longer be invulnerable after phase transition")
 
-	# Deal 200 damage -> 190 HP <= 200 HP threshold for Phase 3
-	queen.take_damage(200)
-	check(queen.current_health == 190, "Queen HP must be 190")
-	check(queen.current_phase == 3, "Queen must transition to Phase 3 at <= 200 HP")
+	# Damage down to just under the phase-3 threshold
+	queen.take_damage((p2_threshold - 10) - p3_threshold + 10)
+	check(queen.current_health == p3_threshold - 10, "Queen HP must be just under the phase-3 threshold")
+	check(queen.current_phase == 3, "Queen must transition to Phase 3 at <= 33% HP")
 
 	print(">>> [TEST 2 PASSED] Boss damage, hit flash, phases, and Area3D hurtbox validated.\n")
 

@@ -13,8 +13,8 @@ enum State {
 }
 
 @export_category("Combat & Stats")
-@export var max_health: int = 50
-var current_health: int = 50
+@export var max_health: int = 70
+var current_health: int = 70
 
 @export_category("Locomotion & AI")
 @export var move_speed: float = 2.0

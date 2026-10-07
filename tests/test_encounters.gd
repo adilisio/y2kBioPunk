@@ -58,7 +58,7 @@ func _run() -> void:
 	roach._enter_repositioning()
 	check(is_equal_approx(roach.state_timer, 1.2) and is_equal_approx(Vector2(roach.velocity.x, roach.velocity.z).length(), 2.0), "roach recovery is 1.2s at 2m/s")
 	roach.take_damage(10)
-	check(roach.current_health == 15, "recovery takes 1.5x damage")
+	check(roach.current_health == roach.max_health - 15, "recovery takes 1.5x damage")
 	for e in pack:
 		e.free()
 	check(int(root.get_meta("roach_attack_slots", 0)) == 0, "pack slots released on removal")

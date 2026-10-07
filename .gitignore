@@ -55,3 +55,4 @@ test_output.txt
 Thumbs.db
 desktop.ini
 ops/runs/
+.worktrees/

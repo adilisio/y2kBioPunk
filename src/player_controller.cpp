@@ -3,6 +3,7 @@
 
 #include <godot_cpp/classes/animation_player.hpp>
 #include <godot_cpp/classes/animation.hpp>
+#include <godot_cpp/classes/audio_server.hpp>
 #include <godot_cpp/classes/audio_stream.hpp>
 #include <godot_cpp/classes/audio_stream_player.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
@@ -45,6 +46,28 @@
 using namespace godot;
 
 static Ref<AudioStreamWAV> create_sfx_stream(const String &type);
+
+// Music -8 dB / SFX 0 dB on separate buses. No default_bus_layout.tres exists, so create them at runtime.
+static void ensure_audio_buses() {
+	AudioServer *server = AudioServer::get_singleton();
+	if (!server) {
+		return;
+	}
+	if (server->get_bus_index("Music") < 0) {
+		server->add_bus();
+		int idx = server->get_bus_count() - 1;
+		server->set_bus_name(idx, "Music");
+		server->set_bus_send(idx, "Master");
+		server->set_bus_volume_db(idx, -8.0f);
+	}
+	if (server->get_bus_index("SFX") < 0) {
+		server->add_bus();
+		int idx = server->get_bus_count() - 1;
+		server->set_bus_name(idx, "SFX");
+		server->set_bus_send(idx, "Master");
+		server->set_bus_volume_db(idx, 0.0f);
+	}
+}
 
 PlayerController::PlayerController() {
 }
@@ -161,13 +184,14 @@ void PlayerController::_ready() {
 	}
 
 	// Setup Walkman audio player
+	ensure_audio_buses();
 	walkman_audio = Object::cast_to<AudioStreamPlayer>(find_child("WalkmanAudio", false, false));
 	if (!walkman_audio) {
 		walkman_audio = memnew(AudioStreamPlayer);
 		walkman_audio->set_name("WalkmanAudio");
-		walkman_audio->set_bus("Music");
 		add_child(walkman_audio);
 	}
+	walkman_audio->set_bus("Music");
 	if (!walkman_audio->is_connected("finished", Callable(walkman_audio, "play"))) {
 		walkman_audio->connect("finished", Callable(walkman_audio, "play"));
 	}
@@ -175,9 +199,9 @@ void PlayerController::_ready() {
 	if (!walkman_audio_b) {
 		walkman_audio_b = memnew(AudioStreamPlayer);
 		walkman_audio_b->set_name("WalkmanAudioB");
-		walkman_audio_b->set_bus("Music");
 		add_child(walkman_audio_b);
 	}
+	walkman_audio_b->set_bus("Music");
 	if (!walkman_audio_b->is_connected("finished", Callable(walkman_audio_b, "play"))) {
 		walkman_audio_b->connect("finished", Callable(walkman_audio_b, "play"));
 	}
@@ -1475,7 +1499,7 @@ void PlayerController::switch_tape(const String &p_tape_name) {
 				walkman_tween = create_tween();
 				if (walkman_tween.is_valid()) {
 					fade_in->set_volume_db(-40.0f);
-					walkman_tween->tween_property(fade_in, "volume_db", -8.0f, 0.25f);
+					walkman_tween->tween_property(fade_in, "volume_db", 0.0f, 0.25f);
 					walkman_tween->parallel()->tween_property(fade_out, "volume_db", -40.0f, 0.25f);
 					walkman_tween->tween_callback(Callable(fade_out, "stop"));
 				}

@@ -157,7 +157,7 @@ scons platform=windows target=template_debug
 ## 4. Key Conventions for Agents
 
 ### Working with C++ Classes
-- **Class Registration**: When adding a new C++ class, remember to include its header in [register_types.cpp](file:///C:/Users/14404/Desktop/game/y2k-biopunk-rpg/src/register_types.cpp) and register it in `initialize_biopunk_module()` with `GDREGISTER_CLASS(MyClass)`.
+- **Class Registration**: When adding a new C++ class, remember to include its header in [register_types.cpp](src/register_types.cpp) and register it in `initialize_biopunk_module()` with `GDREGISTER_CLASS(MyClass)`.
 - **Method Binding**: Bind methods in `_bind_methods()` with `ClassDB::bind_method(D_METHOD("method_name"), &ClassName::method_name)`.
 - **Properties**: Expose properties using `ClassDB::add_property()` with getters and setters so they are accessible from GDScript and the Godot Inspector.
 - **Signals**: Register signals via `ADD_SIGNAL(MethodInfo("signal_name", PropertyInfo(...)))`.

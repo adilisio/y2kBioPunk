@@ -143,9 +143,9 @@ scons platform=windows target=template_debug
 
 ## 🤖 For AI Agents & Contributors
 
-If you are developing or contributing using an AI agent (Cursor, Antigravity, Claude Code, etc.), please refer to [AGENTS.md](file:///C:/Users/14404/Desktop/game/y2k-biopunk-rpg/AGENTS.md) for detailed technical conventions, state machine diagrams, and architectural guidelines.
+If you are developing or contributing using an AI agent (Cursor, Antigravity, Claude Code, etc.), please refer to [AGENTS.md](AGENTS.md) for detailed technical conventions, state machine diagrams, and architectural guidelines.
 
-For complete design vision, lore, and roadmap specifications, see [GAME_SYNOPSIS.md](file:///C:/Users/14404/Desktop/game/y2k-biopunk-rpg/GAME_SYNOPSIS.md).
+For complete design vision, lore, and roadmap specifications, see [GAME_SYNOPSIS.md](GAME_SYNOPSIS.md).
 
 ---
 

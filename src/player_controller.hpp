@@ -247,6 +247,7 @@ public:
 	bool get_is_attacking() const;
 	void set_is_attacking(bool p_attacking);
 	void attack();
+	float get_effective_bat_damage() const;
 	void take_damage(float p_amount, const Vector3 &p_knockback = Vector3());
 	void heal(float p_amount);
 	Area3D *get_attack_sensor() const;

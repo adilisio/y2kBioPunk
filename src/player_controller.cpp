@@ -1149,6 +1149,10 @@ bool PlayerController::orient_towards_cursor() {
 	return false;
 }
 
+float PlayerController::get_effective_bat_damage() const {
+	return base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f;
+}
+
 void PlayerController::attack() {
 	// Melee cannot interrupt an evade; its exit always owns i-frame cleanup.
 	if (current_state == STATE_DEAD || current_state == STATE_EVADING || current_state == STATE_GRINDING || is_movement_locked) {
@@ -1182,7 +1186,7 @@ void PlayerController::start_combo_hit(int p_hit) {
 void PlayerController::execute_bat_attack() {
 	orient_towards_cursor();
 	float multiplier = combo_hit == 3 ? 1.5f : 1.0f;
-	float damage = (base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f) * multiplier;
+	float damage = get_effective_bat_damage() * multiplier;
 	Array damaged_nodes;
 	if (attack_sensor && is_inside_tree()) {
 		// Area overlap caches lag a physics frame. Query the newly positioned shape directly.
@@ -1345,7 +1349,7 @@ void PlayerController::switch_tape(const String &p_tape_name) {
 		buff_desc = "Vitality +8, Vibe +8 (Stadium rock resilience & unshakeable team spirit!)";
 	}
 
-	float current_bat_dmg = base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f;
+	float current_bat_dmg = get_effective_bat_damage();
 	UtilityFunctions::print("[Y2K-WALKMAN] *CLACK!* Inserted cassette: '", current_tape, "' | Buff: ", buff_desc,
 		" | STR: ", get_effective_strength(), " (Bat DMG: ", current_bat_dmg, ")",
 		" | AGI: ", get_effective_agility(), " (Speed: ", get_movement_speed(), ")",
@@ -2741,6 +2745,7 @@ void PlayerController::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "is_attacking"), "set_is_attacking", "get_is_attacking");
 
 	ClassDB::bind_method(D_METHOD("attack"), &PlayerController::attack);
+	ClassDB::bind_method(D_METHOD("get_effective_bat_damage"), &PlayerController::get_effective_bat_damage);
 	ClassDB::bind_method(D_METHOD("take_damage", "amount", "knockback"), &PlayerController::take_damage, DEFVAL(Vector3()));
 	ClassDB::bind_method(D_METHOD("heal", "amount"), &PlayerController::heal);
 

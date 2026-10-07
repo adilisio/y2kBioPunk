@@ -225,6 +225,10 @@ func _init_pager_nodes() -> void:
 	if hp_label:
 		hp_label.add_theme_font_size_override("normal_font_size", 24)
 		hp_label.add_theme_font_size_override("bold_font_size", 24)
+		# Numbers sit on the green bar itself; a dark outline keeps them readable at any HP color.
+		hp_label.add_theme_constant_override("outline_size", 6)
+		hp_label.add_theme_color_override("font_outline_color", Color(0.02, 0.06, 0.03, 0.95))
+		hp_label.add_theme_font_size_override("bold_font_size", 24)
 		hp_label.add_theme_font_size_override("italics_font_size", 24)
 		hp_label.add_theme_font_size_override("bold_italics_font_size", 24)
 	

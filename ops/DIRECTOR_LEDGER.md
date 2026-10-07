@@ -47,9 +47,9 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 | WP-2 | Feel core: grounded model, anim blend/loop/speed-match, momentum + jump, melee timing + hit-stop + shake, hurt feedback, SFX format, grind entry/slam-on-land, evade tune, state-machine exits | Looks and feels broken moment to moment | Codex gpt-6.1-sol high | — | L | Med (hot file, feel tuning) | **merged** |
 | WP-5 | Honest test harness: exit codes, no crash at exit, isolated save path, one-command runner | Director can't trust any gate | Agy gemini-3.8-flash-high | — | S | Low | **merged** |
 | WP-3 | Presentation: WorldEnvironment glow/SSAO/fog/MSAA, color language (player green, enemies magenta/orange, interactables cyan, telegraphs red), emissive rails/kiosks, cutaway south/east walls, HUD legibility (no 0.7 scale, ≥20 px), adrenaline bar, pager messages for gate/level-up | Grey soup, unreadable enemies, tiny text | Agy gemini-3.1-pro-high | WP-1 merged | M | Low–Med | **merged** |
-| WP-4 | Encounters: roach wind-up (0.35 s), cicada contact attack, mortar ballistic solve + landing marker, queen telegraph honest radius + detonation VFX/SFX, death pop + kill SFX, enemy SFX, spawn pacing | Enemies unfair or harmless; no combat beat | Codex gpt-6.1-sol medium | WP-1 + WP-2 merged | M | Med | running (wt wp4) |
+| WP-4 | Encounters: roach wind-up (0.35 s), cicada contact attack, mortar ballistic solve + landing marker, queen telegraph honest radius + detonation VFX/SFX, death pop + kill SFX, enemy SFX, spawn pacing | Enemies unfair or harmless; no combat beat | Codex gpt-6.1-sol medium | WP-1 + WP-2 merged | M | Med | **merged** |
 | WP-6 | Onboarding + audio pass: pager tutorial lines (skates/evade/tape/secondary/grind) timed to first encounters; SFX for jump/land/grind/flame/disk/tape; music continues across tape switch | Nothing is taught; silence | Agy gemini-3.1-pro-high | WP-2 + WP-3 | S–M | Low | running (wt wp6) |
-| WP-7 | Integration playtest + balance (TTK/TTD table, XP curve to level 3–4 before boss, candy placement) | Difficulty curve | Fable + Gemini review | all above | S | Low | queued |
+| WP-7 | End-to-end slice test (start→fight→level→checkpoint→die→respawn→grind→slam→boss→victory→menu) + balance table | Proves the definition of done in one run | Codex gpt-6.1-sol medium | WP-4 merged | M | Low | running (wt wp7) |
 
 ## Active work
 | Agent | Packet | Where | Started |
@@ -72,7 +72,11 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 
 - **WP-3 presentation** (Gemini 3.1 Pro) — merged 17:40. Environment (ACES, glow, SSAO, fog), magenta/orange enemy silhouettes, HUD at native scale with 20/24 px fonts, adrenaline bar, `page_message` queue, south/east walls cut to 1 m. Director follow-up a9a58aa: the .tscn carried stale baked geometry so none of the builder material changes were visible in play → builder now rebuilds at runtime (single source of truth); lighting brightened (ambient 1.5, sun 1.3, exposure 1.2, floor/pillar albedo), rail emission 2.2, player FillLight. Shots `ops/runs/shots/light3.*.png`. Suite 15/15.
 
+- **WP-4 encounters** (Codex, medium) — merged 18:10. Roach wind-up/recovery with pack limit, cicada lunge, ballistic mortars with landing decal, honest queen telegraph (durations 1.4/1.1/0.9, radii 7/9/11), death-once guards, enemy SFX, 9-enemy roster worth 170 XP. `tests/test_encounters.gd` (29 checks) + suite 15/15 verified on main after a one-hunk merge resolution in `turret_mortar.gd` (kept Codex's ballistic step, kept WP-3's visual orientation). Shots `ops/runs/shots/wp4main.*.png`.
+- **Director: HP numbers get a dark outline** so they read on the green bar.
+
 ## Rejected / reworked
+- WP-4 left its worktree dirty (no commits despite the brief); the Director committed the work under Codex's trailer after review. Not a quality rejection.
 - WP-3 report claimed "visual verification" but its own screenshots (`.worktrees/wp3/ops/runs/shots/wp3.*.png`) showed a near-black floor and an unlit player; the agent also left three headless Godot processes running. Accepted the structure, re-tuned the parameters myself.
 - WP-2 attempt 1 (Codex, `-s workspace-write`): no changes made; sandbox blocked git. Relaunched with `danger-full-access` in its own worktree.
 - WP-1 report claimed `tests/test_critical_path.gd` passed; it called a nonexistent SaveManager API and hung. The report also claimed the victory flow was wired; it was not. Both fixed by the Director before merge. Lesson applied to all later dispatches: reports must paste actual test output.

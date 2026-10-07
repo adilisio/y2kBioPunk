@@ -31,12 +31,30 @@ func _ready() -> void:
 	sphere_mesh.radius = 0.32
 	sphere_mesh.height = 0.64
 	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.1, 0.95, 0.2, 1.0)
+	mat.albedo_color = Color(1.0, 0.15, 0.6)
 	mat.emission_enabled = true
-	mat.emission = Color(0.1, 0.8, 0.2, 1.0)
+	mat.emission = Color(1.0, 0.15, 0.6)
 	sphere_mesh.material = mat
 	proj_mesh.mesh = sphere_mesh
 	add_child(proj_mesh)
+	
+	# Trail mesh
+	var trail_node = MeshInstance3D.new()
+	trail_node.name = "TrailVisual"
+	var trail_shape = CylinderMesh.new()
+	trail_shape.top_radius = 0.2
+	trail_shape.bottom_radius = 0.01
+	trail_shape.height = 2.0
+	trail_node.mesh = trail_shape
+	var trail_mat = StandardMaterial3D.new()
+	trail_mat.albedo_color = Color(1.0, 0.15, 0.6, 0.5)
+	trail_mat.emission_enabled = true
+	trail_mat.emission = Color(1.0, 0.15, 0.6)
+	trail_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	trail_node.material_override = trail_mat
+	trail_node.position = Vector3(0, 0, 1.0)
+	trail_node.rotation.x = PI / 2.0
+	proj_mesh.add_child(trail_node)
 
 	var col = CollisionShape3D.new()
 	col.name = "MortarCollision"
@@ -48,6 +66,10 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	velocity.y -= fall_gravity * delta
 	global_position += velocity * delta
+	if velocity.length_squared() > 0.1:
+		var visual = get_node_or_null("MortarVisual")
+		if visual:
+			visual.look_at(global_position + velocity, Vector3.UP)
 	lifetime -= delta
 	if lifetime <= 0.0 or global_position.y < -2.0:
 		queue_free()

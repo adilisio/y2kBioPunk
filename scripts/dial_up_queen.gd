@@ -386,11 +386,11 @@ func _build_visuals() -> void:
 	queen_body.position = Vector3(0.0, 1.8, 0.0)
 
 	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.12, 0.6, 0.4, 1.0) # Toxic neon cyan-green
+	mat.albedo_color = Color(1.0, 0.18, 0.63, 1.0) # magenta/violet
 	mat.metallic = 0.3
 	mat.roughness = 0.5
 	mat.emission_enabled = true
-	mat.emission = Color(0.05, 0.4, 0.3, 1.0)
+	mat.emission = Color(0.8, 0.15, 0.5, 1.0)
 	queen_body.material = mat
 	add_child(queen_body)
 

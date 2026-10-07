@@ -52,6 +52,15 @@ static func track(node: Node) -> Node:
 		tracked_nodes.append(node)
 	return node
 
+static func stop_all_audio(node: Node) -> void:
+	if not is_instance_valid(node):
+		return
+	if node is AudioStreamPlayer:
+		node.stop()
+		node.stream = null
+	for child in node.get_children():
+		stop_all_audio(child)
+
 ## Cleanly free all tracked nodes and wait for frames to flush ObjectDB & PhysicsServer RIDs
 static func cleanup(tree: SceneTree) -> void:
 	# Delete temporary save if one was created
@@ -59,20 +68,29 @@ static func cleanup(tree: SceneTree) -> void:
 		cleanup_isolated_save(active_test_save_path)
 		active_test_save_path = ""
 
-	# Queue-free tracked nodes in reverse order (children before parents)
+	# Stop all AudioStreamPlayers across root and tracked nodes
+	if tree and tree.root:
+		stop_all_audio(tree.root)
+	for node in tracked_nodes:
+		stop_all_audio(node)
+
+	# Queue-free tracked nodes while in the tree so engine cleans them up properly
 	for i in range(tracked_nodes.size() - 1, -1, -1):
 		var node = tracked_nodes[i]
 		if is_instance_valid(node):
-			if node.is_inside_tree():
-				var parent = node.get_parent()
-				if parent and is_instance_valid(parent):
-					parent.remove_child(node)
 			node.queue_free()
 	tracked_nodes.clear()
 
+	# Also free any remaining untracked children spawned into root (e.g. projectiles)
+	if tree and tree.root:
+		for child in tree.root.get_children():
+			if is_instance_valid(child):
+				child.queue_free()
+
 	if tree:
-		await tree.process_frame
-		await tree.physics_frame
+		for i in range(30):
+			await tree.process_frame
+			await tree.physics_frame
 
 ## Static frame awaiting helper
 static func await_frames(tree: SceneTree, count: int = 1) -> void:

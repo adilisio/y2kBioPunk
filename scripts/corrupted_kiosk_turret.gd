@@ -278,7 +278,7 @@ func _build_visuals() -> void:
 	body_mesh.size = Vector3(1.4, 1.6, 1.4)
 	body_mesh.position = Vector3(0.0, 0.8, 0.0)
 	var body_mat = StandardMaterial3D.new()
-	body_mat.albedo_color = Color(0.25, 0.28, 0.32, 1.0)
+	body_mat.albedo_color = Color(0.1, 0.1, 0.12, 1.0) # dark chassis
 	body_mat.metallic = 0.4
 	body_mat.roughness = 0.7
 	body_mesh.material = body_mat
@@ -288,6 +288,24 @@ func _build_visuals() -> void:
 	head_pivot.name = "TurretHead"
 	head_pivot.position = Vector3(0.0, 1.6, 0.0)
 	add_child(head_pivot)
+	
+	var antenna = CSGCylinder3D.new()
+	antenna.name = "Antenna"
+	antenna.radius = 0.05
+	antenna.height = 0.8
+	antenna.position = Vector3(0.4, 0.4, -0.4)
+	var antenna_light = CSGSphere3D.new()
+	antenna_light.name = "AntennaLight"
+	antenna_light.radius = 0.12
+	antenna_light.position = Vector3(0.0, 0.4, 0.0)
+	var antenna_mat = StandardMaterial3D.new()
+	antenna_mat.albedo_color = Color(1.0, 0.18, 0.63, 1.0) # magenta
+	antenna_mat.emission_enabled = true
+	antenna_mat.emission = Color(1.0, 0.18, 0.63, 1.0)
+	antenna_mat.emission_energy_multiplier = 2.0
+	antenna_light.material = antenna_mat
+	antenna.add_child(antenna_light)
+	head_pivot.add_child(antenna)
 
 	screen_mesh = CSGBox3D.new()
 	screen_mesh.name = "CRTScreen"

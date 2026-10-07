@@ -277,17 +277,25 @@ func _build_visuals() -> void:
 	visual_mesh.radius = 0.45
 	visual_mesh.radial_segments = 8
 	visual_mesh.rings = 6
-	visual_mesh.scale = Vector3(0.8, 0.4, 1.3) # Flattened beetle form
+	visual_mesh.scale = Vector3(0.8, 0.4, 1.3) * 1.4 # Flattened beetle form
 	visual_mesh.position = Vector3(0.0, 0.25, 0.0)
 
 	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.2, 0.15, 0.08, 1.0) # Dark chitin
+	mat.albedo_color = Color("#c9541a") # orange-brown
 	mat.metallic = 0.5
 	mat.roughness = 0.4
 	mat.emission_enabled = true
-	mat.emission = Color(0.1, 0.4, 0.1, 1.0) # Toxic glow spots
+	mat.emission = Color(1.0, 0.18, 0.63, 1.0) # magenta underglow
 	visual_mesh.material = mat
 	add_child(visual_mesh)
+	
+	var head_wedge = CSGBox3D.new()
+	head_wedge.name = "HeadWedge"
+	head_wedge.size = Vector3(0.5, 0.2, 0.4)
+	head_wedge.position = Vector3(0, 0, -0.6) # Front facing (Z is backwards usually? No, in Godot forward is -Z)
+	head_wedge.material = mat.duplicate()
+	(head_wedge.material as StandardMaterial3D).emission_energy_multiplier = 2.0
+	visual_mesh.add_child(head_wedge)
 
 	# Collision
 	var col = CollisionShape3D.new()

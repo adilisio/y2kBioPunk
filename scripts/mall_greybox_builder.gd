@@ -39,11 +39,52 @@ func _ready() -> void:
 		_connect_runtime_rails()
 
 	if not Engine.is_editor_hint():
+		set_process(true)
 		var p = get_node_or_null("../Player")
 		if not p:
 			p = get_tree().current_scene.find_child("Player", true, false) if get_tree() and get_tree().current_scene else null
 		if p:
 			p.add_to_group("player")
+
+func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
+	var players = get_tree().get_nodes_in_group("player")
+	if players.is_empty(): return
+	var p = players[0]
+	var cam = get_viewport().get_camera_3d()
+	if not cam: return
+	
+	var cam_pos = cam.global_position
+	var p_pos = p.global_position + Vector3(0, 1.0, 0)
+	var dir = p_pos - cam_pos
+	var dist = cam_pos.distance_to(p_pos)
+	var dir_norm = dir / dist
+	
+	var pillars = get_node_or_null("LevelGeometry/StructuralPillars")
+	if not pillars: return
+	
+	for pillar in pillars.get_children():
+		if pillar is CSGCylinder3D:
+			var mat = pillar.material as StandardMaterial3D
+			if not mat: continue
+			
+			var center = pillar.global_position
+			var to_center = center - cam_pos
+			var t = to_center.dot(dir_norm)
+			var fade = false
+			if t > 0.0 and t < dist:
+				var proj = cam_pos + dir_norm * t
+				var dist_to_line = proj.distance_to(Vector3(center.x, clampf(proj.y, center.y - pillar.height*0.5, center.y + pillar.height*0.5), center.z))
+				if dist_to_line < pillar.radius + 1.0:
+					fade = true
+			
+			if fade:
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				mat.albedo_color.a = 0.25
+			else:
+				mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+				mat.albedo_color.a = 1.0
 
 func _clear_existing_geometry() -> void:
 	var existing = get_node_or_null("LevelGeometry")
@@ -77,13 +118,14 @@ func build_mall_greybox() -> void:
 		enemies_root.owner = get_tree().edited_scene_root if get_tree() else self
 
 	# Create Materials
-	var mat_floor = _create_material(Color(0.20, 0.22, 0.26), 0.85)
-	var mat_flooded = _create_material(Color(0.08, 0.26, 0.24, 0.92), 0.15, 0.4)
+	var mat_floor = _create_material(Color("#2a3136"), 0.9)
+	var mat_flooded = _create_material(Color("#0a3a3a"), 0.1, 0.2, 0.85)
 	var mat_high_wall = _create_material(Color(0.14, 0.16, 0.19), 0.75)
 	var mat_low_wall = _create_material(Color(0.42, 0.46, 0.52), 0.65)
-	var mat_pillar = _create_material(Color(0.76, 0.80, 0.85), 0.40)
-	var mat_kiosk = _create_material(Color(0.58, 0.46, 0.32), 0.55)
+	var mat_pillar = _create_material(Color("#c9ced4"), 0.40)
+	var mat_kiosk = _create_material(Color("#d7a042"), 0.55, 0.0, 0.6, Color("#ff7a1a"), 0.3)
 	var mat_ramp = _create_material(Color(0.30, 0.38, 0.45), 0.60)
+	var mat_strip = _create_material(Color.CYAN, 0.5, 0.0, 1.0, Color.CYAN, 1.5)
 
 	# 1. Main Plaza Floor (50x50m)
 	_add_box(level_root, "MainFloor", Vector3(plaza_size.x, 1.0, plaza_size.y), Vector3(0, -0.5, 0), mat_floor)
@@ -92,9 +134,9 @@ func build_mall_greybox() -> void:
 	var half_x = plaza_size.x * 0.5
 	var half_z = plaza_size.y * 0.5
 	_add_box(level_root, "Wall_North", Vector3(plaza_size.x, high_wall_height, 1.0), Vector3(0, high_wall_height * 0.5, -half_z), mat_high_wall)
-	_add_box(level_root, "Wall_South", Vector3(plaza_size.x, high_wall_height, 1.0), Vector3(0, high_wall_height * 0.5, half_z), mat_high_wall)
+	_add_box(level_root, "Wall_South", Vector3(plaza_size.x, 1.0, 1.0), Vector3(0, 0.5, half_z), mat_high_wall)
 	_add_box(level_root, "Wall_West", Vector3(1.0, high_wall_height, plaza_size.y), Vector3(-half_x, high_wall_height * 0.5, 0), mat_high_wall)
-	_add_box(level_root, "Wall_East", Vector3(1.0, high_wall_height, plaza_size.y), Vector3(half_x, high_wall_height * 0.5, 0), mat_high_wall)
+	_add_box(level_root, "Wall_East", Vector3(1.0, 1.0, plaza_size.y), Vector3(half_x, 0.5, 0), mat_high_wall)
 
 	# 3. Sunken "Flooded Basin" Plaza (Atrium Pool)
 	var basin_parent = Node3D.new()
@@ -137,6 +179,7 @@ func build_mall_greybox() -> void:
 	# Low guard wall / railing overlooking the main plaza
 	_add_box(mezz_parent, "DeckRail_East", Vector3(0.3, 0.9, 16.0), Vector3(-13.65, 1.65, -6.0), mat_low_wall)
 	_add_box(mezz_parent, "DeckRail_North", Vector3(10.0, 0.9, 0.3), Vector3(-18.5, 1.65, -14.15), mat_low_wall)
+	_add_box(mezz_parent, "MezzanineStripLight", Vector3(0.1, 0.1, 16.0), Vector3(-13.4, 1.15, -6.0), mat_strip)
 
 	# 5. Grand Structural Pillars (Colonnade Slalom for 12.0 m/s Skate Traversal)
 	var pillars_parent = Node3D.new()
@@ -150,7 +193,7 @@ func build_mall_greybox() -> void:
 	var p_idx = 1
 	for x in x_coords:
 		for z in z_coords:
-			_add_cylinder(pillars_parent, "Pillar_%02d" % p_idx, pillar_radius, pillar_height, Vector3(x, pillar_height * 0.5, z), mat_pillar)
+			_add_cylinder(pillars_parent, "Pillar_%02d" % p_idx, pillar_radius, pillar_height, Vector3(x, pillar_height * 0.5, z), mat_pillar.duplicate())
 			p_idx += 1
 
 	# 6. Derelict Retail Kiosks & Vendor Islands (Obstacles for cornering)
@@ -163,6 +206,16 @@ func build_mall_greybox() -> void:
 	_add_box(kiosks_parent, "Kiosk_BeeperWorld", Vector3(4.2, 2.8, 3.2), Vector3(-5.5, 1.4, -15.0), mat_kiosk)
 	_add_box(kiosks_parent, "Kiosk_NeonJulius", Vector3(4.5, 2.8, 3.4), Vector3(5.5, 1.4, -15.0), mat_kiosk)
 	_add_box(kiosks_parent, "Kiosk_CassetteVault", Vector3(4.8, 2.8, 3.0), Vector3(16.5, 1.4, 5.0), mat_kiosk)
+	
+	var lights_parent = Node3D.new()
+	lights_parent.name = "EmergencyLights"
+	level_root.add_child(lights_parent)
+	if Engine.is_editor_hint(): lights_parent.owner = get_tree().edited_scene_root if get_tree() else self
+	
+	_add_light(lights_parent, "Light_Kiosk1", Color("#ff7a1a"), 2.0, 9.0, Vector3(-5.5, 3.5, -15.0))
+	_add_light(lights_parent, "Light_Kiosk2", Color("#ff7a1a"), 2.0, 9.0, Vector3(5.5, 3.5, -15.0))
+	_add_light(lights_parent, "Light_Kiosk3", Color("#ff7a1a"), 2.0, 9.0, Vector3(16.5, 3.5, 5.0))
+	_add_light(lights_parent, "Light_Checkpoint", Color.CYAN, 2.0, 9.0, Vector3(3.0, 3.0, 12.0))
 
 	# 7. Hip-Height Planters & Seating Curbs (Low Walls for Camera Occlusion Tests)
 	var planters_parent = Node3D.new()
@@ -199,7 +252,7 @@ func build_mall_greybox() -> void:
 	if Engine.is_editor_hint():
 		rails_parent.owner = get_tree().edited_scene_root if get_tree() else self
 
-	var mat_rail = _create_material(Color(1.0, 0.85, 0.15), 0.25, 0.85) # High-viz Cyber Yellow Chrome Rail
+	var mat_rail = _create_material(Color("#ffd23f"), 0.0, 0.0, 1.0, Color("#ffd23f"), 0.6)
 
 	# Rail 1: Curving around the Sunken Atrium Basin
 	var basin_curve_pts: Array[Vector3] = [
@@ -287,12 +340,32 @@ func _spawn_enemies(enemies_container: Node3D = null) -> void:
 			if Engine.is_editor_hint():
 				roach.owner = get_tree().edited_scene_root if get_tree() else self
 
-func _create_material(albedo: Color, roughness: float = 0.8, metallic: float = 0.0) -> StandardMaterial3D:
+func _create_material(albedo: Color, roughness: float = 0.8, metallic: float = 0.0, alpha: float = 1.0, emission: Color = Color.BLACK, emission_energy: float = 0.0) -> StandardMaterial3D:
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = albedo
 	mat.roughness = roughness
 	mat.metallic = metallic
+	if alpha < 1.0:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color.a = alpha
+	if emission != Color.BLACK:
+		mat.emission_enabled = true
+		mat.emission = emission
+		mat.emission_energy_multiplier = emission_energy
 	return mat
+
+func _add_light(parent: Node, node_name: String, color: Color, energy: float, range_val: float, pos: Vector3) -> OmniLight3D:
+	var light = OmniLight3D.new()
+	light.name = node_name
+	light.light_color = color
+	light.light_energy = energy
+	light.omni_range = range_val
+	light.position = pos
+	light.shadow_enabled = true
+	parent.add_child(light)
+	if Engine.is_editor_hint():
+		light.owner = get_tree().edited_scene_root if get_tree() else self
+	return light
 
 func _add_box(parent: Node, node_name: String, size: Vector3, pos: Vector3, mat: StandardMaterial3D) -> CSGBox3D:
 	var box = CSGBox3D.new()

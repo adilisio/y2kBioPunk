@@ -68,6 +68,9 @@ private:
 	float grind_speed = 12.0f;
 	float grind_cooldown = 0.0f;
 	float grind_elapsed_time = 0.0f;
+	Vector3 grind_entry_position;
+	bool pending_slam = false;
+	Vector3 pending_slam_direction;
 	Area3D *grind_sensor = nullptr;
 
 	// Adrenaline Meter Core

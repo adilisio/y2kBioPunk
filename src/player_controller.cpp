@@ -363,6 +363,10 @@ void PlayerController::_physics_process(double p_delta) {
 		knockback_timer = Math::max(knockback_timer, 0.12f);
 	}
 	step_physics(p_delta);
+	if (pending_slam && is_on_floor() && get_velocity().y <= 0.0f) {
+		pending_slam = false;
+		execute_grind_slam(pending_slam_direction);
+	}
 	observed_velocity = get_velocity();
 }
 
@@ -501,6 +505,7 @@ void PlayerController::step_physics(double p_delta) {
 			}
 		}
 		rail_pos.y += 0.3f;
+		rail_pos = grind_entry_position.lerp(rail_pos, Math::clamp(grind_elapsed_time / 0.06f, 0.0f, 1.0f));
 		if (is_inside_tree()) {
 			set_global_position(rail_pos);
 		} else {
@@ -584,11 +589,11 @@ void PlayerController::step_physics(double p_delta) {
 		// Also allow manual jump dismount (triggers directional shockwave slam!)
 		Input *input = Input::get_singleton();
 		bool jump_dismount = false;
-		if (input && (input->is_action_just_pressed("jump") || input->is_key_pressed(Key::KEY_SPACE))) {
+		if (input && grind_elapsed_time >= 0.15f && input->is_action_just_pressed("jump")) {
 			reached_end = true;
 			jump_dismount = true;
 		}
-		if (input && (input->is_action_just_pressed("attack") || input->is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT))) {
+		if (input && grind_elapsed_time >= 0.15f && input->is_action_just_pressed("attack")) {
 			reached_end = true;
 			jump_dismount = true;
 		}
@@ -603,7 +608,8 @@ void PlayerController::step_physics(double p_delta) {
 			launch_vel.y = jump_dismount ? 5.0f : 3.0f; // Higher launch hop on jump slam
 			dismount_grind(launch_vel);
 			if (jump_dismount) {
-				execute_grind_slam(launch_dir);
+				pending_slam = true;
+				pending_slam_direction = launch_dir;
 			}
 		}
 		return;
@@ -2023,7 +2029,7 @@ void PlayerController::set_flame_particles(GPUParticles3D *p_particles) {
 }
 
 bool PlayerController::try_start_grind(Path3D *p_path) {
-	if (current_state == STATE_DEAD || !p_path || current_state == STATE_GRINDING || grind_cooldown > 0.0f) {
+	if (current_state == STATE_DEAD || !p_path || current_state == STATE_GRINDING || current_state == STATE_ATTACKING || current_state == STATE_EVADING || is_movement_locked || grind_cooldown > 0.0f) {
 		return false;
 	}
 	if (!is_skating && !is_equipped_skates) {
@@ -2034,7 +2040,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 	float speed = vel.length();
 	float horiz_speed = Math::sqrt(vel.x * vel.x + vel.z * vel.z);
 	// Minimum threshold: > 4.0 m/s
-	if (horiz_speed < 4.0f && speed < 4.0f) {
+	if (horiz_speed < 4.0f || (is_on_floor() && recent_jump_timer <= 0.0f)) {
 		return false;
 	}
 
@@ -2064,7 +2070,11 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 		world_tangent.normalize();
 	}
 
-	float dot = vel.dot(world_tangent);
+	Vector3 hv(vel.x, 0, vel.z);
+	if (world_tangent.length_squared() < 0.001f || Math::abs(hv.normalized().dot(world_tangent)) < 0.5f) {
+		return false;
+	}
+	float dot = hv.dot(world_tangent);
 	grind_direction = (dot >= 0.0f) ? 1.0f : -1.0f;
 
 	// Translate entry velocity into progression speed along rail
@@ -2082,24 +2092,8 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 	grind_path_follow->set_loop(false);
 	grind_path_follow->set_progress(closest_offset);
 
-	// Snap player's root transform to the nearest point on the rail
-	Vector3 snapped_pos;
-	if (grind_path_follow && grind_path_follow->is_inside_tree()) {
-		snapped_pos = grind_path_follow->get_global_position();
-	} else {
-		Vector3 curve_point = curve->sample_baked(closest_offset);
-		if (p_path->is_inside_tree()) {
-			snapped_pos = p_path->get_global_transform().xform(curve_point);
-		} else {
-			snapped_pos = p_path->get_position() + curve_point;
-		}
-	}
-	snapped_pos.y += 0.3f; // Align feet with rail top
-	if (is_inside_tree()) {
-		set_global_position(snapped_pos);
-	} else {
-		set_position(snapped_pos);
-	}
+	// Smooth the entry from this root position over the next 0.06 seconds.
+	grind_entry_position = player_pos;
 
 	current_grind_path = p_path;
 	current_state = STATE_GRINDING;
@@ -2116,20 +2110,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 			visuals = Object::cast_to<Node3D>(find_child("Visuals", true, false));
 		}
 	}
-	if (visuals) {
-		if (visuals->is_inside_tree()) {
-			Vector3 vis_pos = visuals->get_global_position();
-			Vector3 target_pos = vis_pos + facing_direction;
-			if (vis_pos.distance_squared_to(target_pos) > 0.0001f) {
-				visuals->look_at(target_pos, Vector3(0.0f, 1.0f, 0.0f));
-			}
-		} else {
-			Basis tb = Basis::looking_at(facing_direction, Vector3(0.0f, 1.0f, 0.0f));
-			Transform3D vt = visuals->get_transform();
-			vt.basis = tb;
-			visuals->set_transform(vt);
-		}
-	}
+	rotate_visuals(facing_direction, get_physics_process_delta_time());
 
 	// Animation State: Explicitly command AnimationPlayer to play "Skate_Grind"
 	if (!anim_player) {
@@ -2152,7 +2133,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 		} else if (anim_player->has_animation("Grind")) {
 			anim_player->play("Grind");
 		} else {
-			anim_player->play("Skate_Grind");
+			anim_player->play("Running");
 		}
 	}
 
@@ -2172,7 +2153,7 @@ void PlayerController::dismount_grind(const Vector3 &p_exit_velocity) {
 		exit_vel.y = 2.5f;
 	}
 
-	current_state = STATE_NORMAL;
+	current_state = STATE_AIRBORNE;
 	current_grind_path = nullptr;
 	grind_path_follow = nullptr;
 	grind_progress = 0.0f;
@@ -2180,9 +2161,6 @@ void PlayerController::dismount_grind(const Vector3 &p_exit_velocity) {
 	grind_cooldown = 0.5f;
 
 	set_velocity(exit_vel);
-	if (is_inside_tree()) {
-		move_and_slide();
-	}
 
 	if (!anim_player) {
 		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
@@ -2375,6 +2353,8 @@ void PlayerController::execute_grind_slam(const Vector3 &p_direction) {
 	float slam_damage = base_slam_damage + static_cast<float>(get_effective_strength()) * 3.0f + (current_adrenaline * 0.25f);
 	UtilityFunctions::print("[Y2K-GRIND] *BOOM!* Rail Dismount Shockwave Slam! Dealing ", slam_damage, " damage (Radius: ", slam_radius, "m)");
 	play_sfx("slam");
+	hit_stop(0.10f);
+	add_camera_trauma(0.6f);
 
 	// Visual Shockwave Effect (CylinderMesh with transparent, unshaded StandardMaterial3D)
 	MeshInstance3D *shockwave = memnew(MeshInstance3D);

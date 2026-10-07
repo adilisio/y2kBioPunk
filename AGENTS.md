@@ -39,10 +39,10 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
 - **`PlayerController`** (`CharacterBody3D`):
   - 6-state locomotion FSM: `STATE_NORMAL` (0), `STATE_ATTACKING` (1), `STATE_GRINDING` (2), `STATE_AIRBORNE` (3), `STATE_EVADING` (4), `STATE_DEAD` (5).
   - Camera-relative 45° isometric movement transform; decoupled `Visuals` rotation lerp.
-  - Roller skate toggle (6.0 m/s walking ➔ 12.0 m/s skating).
+  - Roller skate toggle: stat/tape-derived walking speed and 12 m/s base skating; acceleration, coast, braking and speed-dependent carving. Air steering preserves momentum.
   - Spline rail grinding along `Path3D` via `PathFollow3D` with dynamic tangent orientation.
-  - Grind dismount shockwave slam (`execute_grind_slam()`, 4.5m radius AoE).
-  - Evade / power-slide with invincibility frames (`is_invincible = true`).
+  - Aligned, moving, airborne/jump rail entry; manual dismount queues `execute_grind_slam()` until landing (4.5m radius AoE).
+  - Evade / power-slide with temporary immunity. All transitions use `set_state`, including exit cleanup; evade-to-attack is refused. Damage grants 0.6 s hurt i-frames, flash, knockback and camera shake.
   - Melee attack registration via `AttackSensor` (`Area3D`, 2.2m radius).
   - Secondary weapon arsenal: Aerosol Flamethrower (continuous tick + particles) and Disk Launcher.
   - Walkman Cassette tape engine modifying real-time effective stats (STR, AGI, VIT, VIBE).
@@ -52,11 +52,11 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
 
 ### What Lives in GDScript (`scripts/`)
 - **Enemy AI Entities**:
-  - `neon_cicada.gd`: 3D wander AI, emissive flash hit reaction, 7.5 m/s knockback.
-  - `sludge_roach.gd`: 4-state flank/pounce AI (Idle ➔ Flanking wave ➔ Pouncing leap ➔ Repositioning).
+  - `neon_cicada.gd`: wander/chase AI with telegraphed contact lunge, hit reaction and directional knockback (70 HP).
+  - `sludge_roach.gd`: flank, wind-up, pounce and vulnerable recovery with pack attack limits (45 HP).
   - `corrupted_kiosk_turret.gd`: Stationary mortar turret with dynamic CSG mesh construction and arc projectile launcher.
 - **Boss Encounter**:
-  - `dial_up_queen.gd`: 3-phase modem boss (600 HP) featuring Modem Screech AoE, minion summons, and shockwave pulses.
+  - `dial_up_queen.gd`: 3-phase modem boss (1500 HP) featuring Modem Screech AoE, minion summons, and shockwave pulses.
 - **Level & World Generation**:
   - `mall_greybox_builder.gd`: `@tool` procedural CSG flooded shopping mall atrium generator with mezzanine, ramps, slalom pillars, and grind rails.
 - **User Interface & Feedback**:
@@ -64,7 +64,7 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
 - **Gameplay Objects & Pickups**:
   - `health_candy_pickup.gd`: Gusher-style bio-candy restoring 10 HP with sound chime.
   - `disk_projectile.gd` & `turret_mortar.gd`: Arcing and linear combat projectiles.
-  - `isometric_camera.gd`: Camera tracking player with fixed isometric offset.
+  - `isometric_camera.gd`: SpringArm3D follow, look-ahead and trauma shake; 12 m arm and 45-degree FOV, fixed isometric orientation. Camera collision is disabled for stable framing.
 
 ---
 
@@ -119,7 +119,8 @@ y2k-biopunk-rpg/
 │
 ├── music/                      # Cassette tape audio tracks
 ├── sprites/                    # Spritesheets & 2D art
-└── tests/                      # Verification and test GDScripts
+|-- ops/                        # CONTEXT.md, DIRECTOR_LEDGER.md, briefs/, reports/, tools/, runs/
+`-- tests/                      # Headless SceneTree scripts; inventory below
 ```
 
 ---
@@ -149,6 +150,23 @@ cd ..
 scons platform=windows target=template_debug
 ```
 
+### Headless verification and tooling
+
+Download Godot 4.3 separately: the engine executable is gitignored, not supplied by a fresh clone. From the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1 -GodotBin C:/tools/Godot_v4.3-stable_win64.exe
+& C:/tools/Godot_v4.3-stable_win64.exe --headless --path . -s tests/test_slice_e2e.gd
+```
+
+The runner discovers `test_*.gd` and `verify_*.gd`, checks exit codes, script errors and failed results, enforces a timeout, and stores logs in `ops/runs/tests/`. `_test_util.gd` provides assertions, cleanup and isolated saves. Passing does not imply warning-free rendering or an audio playtest.
+
+Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_critical_path`, `test_cursor_aiming`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_presentation`, `test_slice_e2e`, `test_systems`, `test_tapes`, and `verify_camera_and_hud` (all `.gd`).
+
+`ops/tools/shot_harness.gd` captures in-engine screenshots and scripted input with `scene=`, `out=` and `steps=` arguments after `--`. Steps include `wait`, `shot`, `press`, `hold`, `release`, `key` and `quit`. It requires rendered/windowed Godot and is Director/human tooling: agents must not run it windowed or claim headless screenshots prove presentation. `shot.ps1` is also windowed tooling. `sim_steer.gd`, `smoke_mall.gd` and `balance_table.gd` are diagnostics; `build_greybox.gd` is a scene generator, not a test.
+
+`ops/tools/setup_worktree.ps1 -Name <packet> -Branch <branch> -From main` creates a worktree, copies local engine/bindings/DLL and imports headlessly. Use only when worktree creation is authorized; an assigned existing worktree must be retained.
+
 ### Critical Build Flag Rule (MSVC `/MT`)
 `SConstruct` explicitly strips debug runtime flags (`/MDd`, `/MTd`, etc.) and forces `/MT` (static release runtime) to match the runtime used by `godot-cpp`. **Do not bypass this in SConstruct**, otherwise the linker will fail with `LNK2038: mismatch detected for 'RuntimeLibrary'`.
 
@@ -165,14 +183,26 @@ scons platform=windows target=template_debug
 ### Working with GDScript & Enemies
 - **Standard Damage Interface**: All damageable entities must implement:
   ```gdscript
-  func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
+  func take_damage(amount: int, dir: Vector3 = Vector3.ZERO) -> void:
   ```
 - **Player Damage Interface**: To damage the player from GDScript:
   ```gdscript
   if body.has_method("take_damage"):
       body.take_damage(damage_amount, knockback_vector)
   ```
-- **XP Dispersal**: When an enemy dies, it awards XP by calling `player.gain_xp(xp_amount)`.
+- **Native player damage**: `take_damage(float amount, const Vector3 &knockback = Vector3())` is bound with an optional second argument.
+- **Direction contract**: Pass a normalized direction (or zero), not a velocity in m/s. Receivers apply their own impulse; cicada/roach normalize supplied directions and clamp magnitude scaling. Combo hits can deliberately scale the direction.
+- **XP Dispersal**: Each enemy guards death and calls `player.gain_xp(xp_amount)` exactly once; repeated lethal hits must not duplicate rewards.
+- **Player signals**: Bindings in `player_controller.cpp` expose hurt/health, attack, stats, tape/skates, XP/level/stat spending, adrenaline, grind start/end/slam, evade start/end, secondary fire/switch, and `player_died`.
+
+### Session, Level and Boss Contracts
+- `SaveManager` is the persistent autoload. New Game calls `clear_save()` and clears load/respawn intent; Continue sets `pending_load`. HUD consumes this flag to restore checkpoint position, progression, stats and tape with full health.
+- Death sets `respawn_pending`; after reload the HUD restores the last Bio-Stabilizer save, then clears the flag. Ordinary level entry must not blindly apply a stale save. Respawn restores checkpoint progression, not an arbitrary dead snapshot.
+- `mark_slice_complete()` persists `slice_complete` on Queen defeat; the victory card returns to the menu.
+- The boss gate is entry-triggered at z = -19, independent of clearing every enemy. `boss_encounter_trigger.gd` owns spawning; HUD owns boss display and victory flow.
+- `mall_greybox_builder.gd` rebuilds runtime geometry and encounters: it is the source of truth rather than stale baked `.tscn` geometry.
+- WP-6 intended behavior (landing separately): onboarding hints via the pager; music/SFX buses; tape resume. Do not infer verification from this description.
+- `StrandedSoldierNPC` and native `MutatedBugEnemy` remain registered but unused by the active slice.
 
 ### Isometric Geometry & Movement
 - The isometric camera sits at a 45° angle.
@@ -196,12 +226,21 @@ When testing during development, if the Godot Editor or game instance is running
 |---|---|---|
 | `move_forward` / `move_backward` | `W` / `S` | Move forward / back relative to 45° camera |
 | `move_left` / `move_right` | `A` / `D` | Move left / right relative to 45° camera |
-| `jump` | `Space` | Jump (6.0 m/s vertical impulse) |
+| `jump` | `Space` | Jump (7.2 m/s vertical impulse) |
 | `attack` / `bat_swing` | `LMB` | Melee baseball bat attack combo |
 | `secondary_fire` / `secondary_attack` | `RMB` / `F` | Fire secondary weapon (Flamethrower / Disks) |
 | `cycle_secondary` | `Q` | Cycle active secondary weapon |
-| `toggle_skates` / `equip_skates`| `K` | Toggle roller skates (6 m/s walk ➔ 12 m/s sprint) |
+| `toggle_skates` / `equip_skates` | `K` | Toggle roller skates (momentum, coast and carving) |
 | `switch_tape` | `T` | Cycle active Walkman mixtape |
 | `evade` | `Shift` / `V` | Power-slide dodge with invincibility frames |
 | `toggle_character_sheet` | `C` | Toggle character sheet modal |
 | `interact` | `E` | Talk to NPCs / interact with world objects |
+
+
+## 6. Rules for Agents
+
+- Stay in the assigned worktree and follow the packet's file ownership. The ledger's Verified entries supersede historical baseline claims in `ops/CONTEXT.md`.
+- Run Godot headlessly only; never open the editor or a windowed game from an agent. Close relevant game/editor instances before building to avoid DLL locks; do not kill other agents' processes.
+- Report actual commands, exit codes and pasted output. Distinguish verified behavior, estimates, warnings and unfinished work.
+- Commit before finishing when the packet/user requires it; that explicit instruction overrides CONTEXT's older Director-only commit policy.
+- Do not commit generated `*.import` churn or run scene generators as tests.

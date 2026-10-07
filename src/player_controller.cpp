@@ -2,6 +2,7 @@
 #include "mutated_bug_enemy.hpp"
 
 #include <godot_cpp/classes/animation_player.hpp>
+#include <godot_cpp/classes/animation.hpp>
 #include <godot_cpp/classes/audio_stream.hpp>
 #include <godot_cpp/classes/audio_stream_player.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
@@ -13,6 +14,10 @@
 #include <godot_cpp/classes/gpu_particles3d.hpp>
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_map.hpp>
+#include <godot_cpp/classes/physics_direct_space_state3d.hpp>
+#include <godot_cpp/classes/physics_shape_query_parameters3d.hpp>
+#include <godot_cpp/classes/world3d.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/mesh_instance3d.hpp>
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/packed_scene.hpp>
@@ -24,6 +29,7 @@
 #include <godot_cpp/classes/callback_tweener.hpp>
 #include <godot_cpp/classes/property_tweener.hpp>
 #include <godot_cpp/classes/sphere_mesh.hpp>
+#include <godot_cpp/classes/skeleton3d.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/tween.hpp>
 #include <godot_cpp/classes/viewport.hpp>
@@ -38,6 +44,8 @@
 
 using namespace godot;
 
+static Ref<AudioStreamWAV> create_sfx_stream(const String &type);
+
 PlayerController::PlayerController() {
 }
 
@@ -48,20 +56,21 @@ void PlayerController::_ready() {
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
 	}
+	if (ready_initialized) {
+		return;
+	}
+	ready_initialized = true;
 
 	set_motion_mode(MOTION_MODE_GROUNDED);
 	set_collision_layer(1 | 2);
-
-	// Retrieve project default gravity
-	ProjectSettings *settings = ProjectSettings::get_singleton();
-	if (settings && settings->has_setting("physics/3d/default_gravity")) {
-		gravity = static_cast<float>(settings->get_setting("physics/3d/default_gravity", 9.8f));
-	}
 
 	// Retrieve Visuals node
 	visuals = Object::cast_to<Node3D>(get_node_or_null("Visuals"));
 	if (!visuals) {
 		visuals = Object::cast_to<Node3D>(find_child("Visuals", true, false));
+	}
+	if (visuals) {
+		visuals_rest_position = visuals->get_position();
 	}
 
 	// Retrieve AnimationPlayer node safely
@@ -76,14 +85,24 @@ void PlayerController::_ready() {
 		}
 	}
 	if (anim_player) {
-		anim_player->set_speed_scale(1.0f);
-		if (anim_player->has_animation("restpose")) {
-			anim_player->play("restpose");
-		} else if (anim_player->has_animation("Walking")) {
-			anim_player->play("Walking");
-			anim_player->pause();
+		anim_player->set_default_blend_time(0.12);
+		for (const char *name : { "Walking", "Running", "Skate_Grind" }) {
+			if (anim_player->has_animation(name)) {
+				anim_player->get_animation(name)->set_loop_mode(Animation::LOOP_LINEAR);
+			}
+		}
+		process_animation();
+	}
+
+	if (visuals) {
+		skin_meshes = visuals->find_children("Mesh_*", "MeshInstance3D", true, false);
+		for (int i = 0; i < skin_meshes.size(); ++i) {
+			MeshInstance3D *mesh = Object::cast_to<MeshInstance3D>(skin_meshes[i]);
+			skin_overlays.append(mesh->get_material_overlay());
 		}
 	}
+	hurt_overlay.instantiate();
+	hurt_overlay->set_shading_mode(BaseMaterial3D::SHADING_MODE_UNSHADED);
 
 	// Retrieve FlamethrowerParticles node (child of Visuals)
 	flame_particles = Object::cast_to<GPUParticles3D>(find_child("FlamethrowerParticles", true, false));
@@ -152,13 +171,7 @@ void PlayerController::_ready() {
 		walkman_audio->connect("finished", Callable(walkman_audio, "play"));
 	}
 
-	// Setup SFX audio player
-	sfx_audio = Object::cast_to<AudioStreamPlayer>(find_child("SFXAudio", false, false));
-	if (!sfx_audio) {
-		sfx_audio = memnew(AudioStreamPlayer);
-		sfx_audio->set_name("SFXAudio");
-		add_child(sfx_audio);
-	}
+	setup_sfx();
 
 	// Setup Grindable Area3D Sensor for detecting grind rails
 	grind_sensor = Object::cast_to<Area3D>(find_child("GrindSensor", false, false));
@@ -209,6 +222,7 @@ void PlayerController::_ready() {
 		attack_sensor->add_child(atk_col);
 		add_child(attack_sensor);
 	}
+	attack_sensor->set_collision_mask(attack_sensor->get_collision_mask() & ~1u);
 	attack_sensor->set_position(facing_direction * 1.2f + Vector3(0.0f, 0.5f, 0.0f));
 
 	recalculate_derived_stats();
@@ -335,8 +349,38 @@ void PlayerController::_physics_process(double p_delta) {
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
 	}
+	Vector3 change = get_velocity() - observed_velocity;
+	change.y = 0;
+	// Honor external velocity shoves instead of overwriting them on the next tick.
+	if (change.length_squared() > 0.01f && current_state != STATE_GRINDING) {
+		knockback_timer = Math::max(knockback_timer, 0.12f);
+	}
+	step_physics(p_delta);
+	if (pending_slam && is_on_floor() && get_velocity().y <= 0.0f) {
+		pending_slam = false;
+		execute_grind_slam(pending_slam_direction);
+	}
+	observed_velocity = get_velocity();
+}
+
+void PlayerController::step_physics(double p_delta) {
+	if (Engine::get_singleton()->is_editor_hint()) {
+		return;
+	}
 
 	float delta_f = static_cast<float>(p_delta);
+	hurt_invuln_timer = Math::max(0.0f, hurt_invuln_timer - delta_f);
+	if (hurt_flash_timer > 0.0f) {
+		hurt_flash_timer = Math::max(0.0f, hurt_flash_timer - delta_f);
+		hurt_overlay->set_albedo(hurt_flash_timer > 0.10f ? Color(1, 1, 1) : Color(1, 0.1f, 0.1f));
+		for (int i = 0; i < skin_meshes.size(); ++i) {
+			MeshInstance3D *mesh = Object::cast_to<MeshInstance3D>(skin_meshes[i]);
+			if (hurt_flash_timer <= 0) {
+				Ref<Material> original = skin_overlays[i];
+				mesh->set_material_overlay(original);
+			}
+		}
+	}
 
 	if (current_state == STATE_DEAD) {
 		set_velocity(Vector3(0.0f, 0.0f, 0.0f));
@@ -352,6 +396,14 @@ void PlayerController::_physics_process(double p_delta) {
 		return;
 	}
 
+	Input *jump_input = Input::get_singleton();
+	coyote_timer = is_on_floor() ? 0.10f : Math::max(0.0f, coyote_timer - delta_f);
+	jump_buffer_timer = Math::max(0.0f, jump_buffer_timer - delta_f);
+	recent_jump_timer = Math::max(0.0f, recent_jump_timer - delta_f);
+	if (jump_input && jump_input->is_action_just_pressed("jump")) {
+		jump_buffer_timer = 0.12f;
+		recent_jump_timer = 0.15f;
+	}
 	Vector3 current_velocity = get_velocity();
 
 	// Update cooldowns
@@ -366,6 +418,10 @@ void PlayerController::_physics_process(double p_delta) {
 	}
 	if (flame_tick_timer > 0.0f) {
 		flame_tick_timer -= delta_f;
+	}
+
+	if (!is_movement_locked) {
+		dispatch_gameplay_input();
 	}
 
 	// =========================================================================
@@ -446,6 +502,7 @@ void PlayerController::_physics_process(double p_delta) {
 			}
 		}
 		rail_pos.y += 0.3f;
+		rail_pos = grind_entry_position.lerp(rail_pos, Math::clamp(grind_elapsed_time / 0.06f, 0.0f, 1.0f));
 		if (is_inside_tree()) {
 			set_global_position(rail_pos);
 		} else {
@@ -529,11 +586,11 @@ void PlayerController::_physics_process(double p_delta) {
 		// Also allow manual jump dismount (triggers directional shockwave slam!)
 		Input *input = Input::get_singleton();
 		bool jump_dismount = false;
-		if (input && (input->is_action_just_pressed("jump") || input->is_key_pressed(Key::KEY_SPACE))) {
+		if (input && grind_elapsed_time >= 0.15f && input->is_action_just_pressed("jump")) {
 			reached_end = true;
 			jump_dismount = true;
 		}
-		if (input && (input->is_action_just_pressed("attack") || input->is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT))) {
+		if (input && grind_elapsed_time >= 0.15f && input->is_action_just_pressed("attack")) {
 			reached_end = true;
 			jump_dismount = true;
 		}
@@ -548,7 +605,8 @@ void PlayerController::_physics_process(double p_delta) {
 			launch_vel.y = jump_dismount ? 5.0f : 3.0f; // Higher launch hop on jump slam
 			dismount_grind(launch_vel);
 			if (jump_dismount) {
-				execute_grind_slam(launch_dir);
+				pending_slam = true;
+				pending_slam_direction = launch_dir;
 			}
 		}
 		return;
@@ -558,47 +616,40 @@ void PlayerController::_physics_process(double p_delta) {
 	// STATE_EVADING: Slide-Dodge Mechanic (Velocity Boost & I-Frames)
 	// =========================================================================
 	if (current_state == STATE_EVADING) {
-		evade_timer -= delta_f;
-		is_invincible = true;
-
-		// Velocity boost along evade direction
-		current_velocity.x = evade_direction.x * evade_speed;
-		current_velocity.z = evade_direction.z * evade_speed;
-		if (!is_on_floor()) {
-			current_velocity.y -= gravity * delta_f;
+		evade_timer = Math::max(0.0f, evade_timer - delta_f);
+		float elapsed = evade_duration - evade_timer;
+		is_invincible = elapsed < 0.18f;
+		float blend = Math::clamp((elapsed / evade_duration - 0.7f) / 0.3f, 0.0f, 1.0f);
+		blend = blend * blend * (3.0f - 2.0f * blend);
+		float speed = Math::lerp(evade_speed, get_movement_speed(), blend);
+		if (knockback_timer > 0) {
+			knockback_timer = Math::max(0.0f, knockback_timer - delta_f);
+		} else {
+			current_velocity.x = evade_direction.x * speed;
+			current_velocity.z = evade_direction.z * speed;
 		}
-
+		if (!is_on_floor()) {
+			current_velocity.y -= (current_velocity.y < 0 ? fall_gravity : gravity) * delta_f;
+		}
 		set_velocity(current_velocity);
 		move_and_slide();
-
-		if (evade_timer <= 0.0f) {
-			evade_timer = 0.0f;
-			is_invincible = false;
-			current_state = STATE_NORMAL;
-			evade_cooldown = evade_cooldown_max;
-
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-			}
-			if (anim_player) {
-				anim_player->set_speed_scale(1.0f);
-				String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
-				anim_player->play(anim_to_play);
-			}
-			emit_signal("evade_ended");
+		rotate_visuals(evade_direction, p_delta);
+		if (evade_timer <= 0) {
+			set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
+			process_animation();
 		}
 		return;
 	}
 
 	// 1. Apply gravity: If not on floor, subtract gravity * delta from velocity.y
 	if (!is_on_floor()) {
-		current_velocity.y -= gravity * delta_f;
+		current_velocity.y -= (current_velocity.y < 0 ? fall_gravity : gravity) * delta_f;
 		if (current_state == STATE_NORMAL && !is_attacking) {
-			current_state = STATE_AIRBORNE;
+			set_state(STATE_AIRBORNE);
 		}
 	} else {
 		if (current_state == STATE_AIRBORNE) {
-			current_state = STATE_NORMAL;
+			set_state(STATE_NORMAL);
 		}
 	}
 
@@ -609,103 +660,41 @@ void PlayerController::_physics_process(double p_delta) {
 		set_velocity(current_velocity);
 		move_and_slide();
 		if (anim_player) {
-			anim_player->set_speed_scale(1.0f);
-			anim_player->play("restpose");
+			process_animation();
 		}
 		return;
 	}
 
-	// Update attack cooldown timer & reset is_attacking state
-	if (is_attacking || current_state == STATE_ATTACKING) {
+	if (is_attacking) {
 		attack_timer -= delta_f;
-
-		bool anim_finished = false;
-		if (anim_player) {
-			double anim_len = anim_player->get_current_animation_length();
-			double anim_pos = anim_player->get_current_animation_position();
-			if (anim_len > 0.05 && anim_pos >= anim_len - 0.02) {
-				anim_finished = true;
+		if (pending_hit_timer >= 0.0f) {
+			pending_hit_timer -= delta_f;
+			if (pending_hit_timer <= 0.0f) {
+				pending_hit_timer = -1.0f;
+				execute_bat_attack();
 			}
 		}
-
-		if (attack_timer <= 0.0f || anim_finished) {
-			attack_timer = 0.0f;
-			is_attacking = false;
-			current_state = STATE_NORMAL;
-
-			// When resetting the state, check if moving -> "Running" (if skates) or "Walking", otherwise play "restpose"
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-				if (!anim_player) {
-					anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-				}
-			}
-			if (anim_player) {
-				float exit_speed = (is_skating || is_equipped_skates) ? 2.0f : 1.0f;
-				anim_player->set_speed_scale(exit_speed);
-				if (get_velocity().length() > 0.0001f) {
-					String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
-					anim_player->play(anim_to_play);
-				} else {
-					anim_player->play("restpose");
-				}
+		if (attack_timer <= 0.0f) {
+			if (combo_buffered && combo_hit < 3) {
+				start_combo_hit(combo_hit + 1);
+			} else {
+				is_attacking = false;
+				set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
 			}
 		}
-	} else if (attack_timer > 0.0f) {
-		attack_timer -= delta_f;
 	}
 
 	// Check if input actions were just pressed
 	Input *input = Input::get_singleton();
 	if (input) {
-		InputMap *input_map = InputMap::get_singleton();
-		if (input_map && input_map->has_action("equip_skates")) {
-			if (input->is_action_just_pressed("equip_skates")) {
-				set_is_skating(!is_skating);
-			}
-		}
-
-		// Jump Mechanic: Check if character is_on_floor() and jump input is pressed
-		bool has_jump = input_map && input_map->has_action("jump");
-		bool jump_pressed = false;
-		if (has_jump) {
-			jump_pressed = input->is_action_just_pressed("jump");
-		} else if (input_map && input_map->has_action("ui_accept")) {
-			jump_pressed = input->is_action_just_pressed("ui_accept");
-		} else {
-			jump_pressed = input->is_action_just_pressed("jump");
-		}
-		if (jump_pressed && is_on_floor() && !is_attacking && current_state != STATE_GRINDING) {
+		if (jump_buffer_timer > 0 && coyote_timer > 0 && !is_attacking) {
 			current_velocity.y = jump_velocity;
-			current_state = STATE_AIRBORNE;
-			UtilityFunctions::print("[Y2K-MOVEMENT] Jump triggered! Initial Y velocity: ", jump_velocity);
+			play_sfx("jump");
+			jump_buffer_timer = coyote_timer = 0.0f;
+			set_state(STATE_AIRBORNE);
 		}
-
-		// Evade / Power-Slide Trigger
-		bool evade_pressed = input->is_action_just_pressed("evade");
-		if (!evade_pressed && input_map && input_map->has_action("dodge")) {
-			evade_pressed = input->is_action_just_pressed("dodge");
-		}
-		if (!evade_pressed && (input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V))) {
-			if (!evade_key_was_pressed) {
-				evade_pressed = true;
-			}
-		}
-		evade_key_was_pressed = input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V);
-
-		if (evade_pressed && current_state != STATE_EVADING && current_state != STATE_GRINDING && !is_movement_locked) {
-			if (try_evade()) {
-				return;
-			}
-		}
-
-		// Combat Attack Trigger: Check if Input::get_singleton()->is_action_just_pressed("attack") and !is_attacking
-		bool is_attack_just_pressed = input->is_action_just_pressed("attack");
-		if (!is_attack_just_pressed && input_map && input_map->has_action("bat_swing")) {
-			is_attack_just_pressed = input->is_action_just_pressed("bat_swing");
-		}
-		if (is_attack_just_pressed && !is_attacking) {
-			attack();
+		if (input->is_action_just_released("jump") && current_velocity.y > 0) {
+			current_velocity.y *= 0.5f;
 		}
 	}
 
@@ -760,25 +749,53 @@ void PlayerController::_physics_process(double p_delta) {
 		}
 	}
 
-	// 4. Apply the direction to the character's velocity vector, using skate_speed if is_skating is true, otherwise standard walk speed
-	float speed = is_skating ? skate_speed : get_movement_speed();
-	if (!is_on_floor()) {
-		// Airborne: maintain horizontal momentum while allowing air steering
-		if (move_direction.length_squared() > 0.0001f) {
-			current_velocity.x = Math::lerp(current_velocity.x, move_direction.x * speed, 6.0f * delta_f);
-			current_velocity.z = Math::lerp(current_velocity.z, move_direction.z * speed, 6.0f * delta_f);
-		} else {
-			// Gentle air resistance preserves jump trajectory
-			current_velocity.x = Math::lerp(current_velocity.x, 0.0f, 1.0f * delta_f);
-			current_velocity.z = Math::lerp(current_velocity.z, 0.0f, 1.0f * delta_f);
+	float speed = get_movement_speed() * (is_attacking ? 0.25f : 1.0f);
+	Vector3 hv(current_velocity.x, 0, current_velocity.z);
+	bool skating = is_skating || is_equipped_skates;
+	bool has_input = move_direction.length_squared() > 0.0001f;
+	if (knockback_timer > 0) {
+		knockback_timer = Math::max(0.0f, knockback_timer - delta_f);
+	} else if (!is_on_floor()) {
+		if (has_input) {
+			float h_speed = hv.length();
+			Vector3 direction = h_speed > 0.01f ? hv / h_speed : move_direction;
+			float angle = direction.signed_angle_to(move_direction, Vector3(0, 1, 0));
+			float turn = Math::deg_to_rad(180.0f) * delta_f;
+			direction = direction.rotated(Vector3(0, 1, 0), Math::clamp(angle, -turn, turn));
+			hv = hv.move_toward(direction * speed, 20.0f * delta_f);
 		}
+	} else if (!skating) {
+		bool braking = has_input && hv.length_squared() > 0.01f && hv.normalized().dot(move_direction) < -0.3f;
+		hv = hv.move_toward(move_direction * speed, (has_input && !braking ? 70.0f : 90.0f) * delta_f);
+	} else if (!has_input) {
+		hv = hv.move_toward(Vector3(), 4.0f * delta_f);
+	} else if (hv.length_squared() > 0.01f && hv.normalized().dot(move_direction) < -0.3f) {
+		// Brake before reversing rather than instantly flipping the skate trajectory.
+		hv = hv.move_toward(move_direction * speed, 28.0f * delta_f);
 	} else {
-		current_velocity.x = move_direction.x * speed;
-		current_velocity.z = move_direction.z * speed;
+		float h_speed = hv.length();
+		Vector3 direction = h_speed > 0.01f ? hv / h_speed : move_direction;
+		float angle = direction.signed_angle_to(move_direction, Vector3(0, 1, 0));
+		float turn_rate = Math::lerp(360.0f, 200.0f, Math::clamp((h_speed - 6.0f) / 6.0f, 0.0f, 1.0f));
+		float turn = Math::deg_to_rad(turn_rate) * delta_f;
+		direction = direction.rotated(Vector3(0, 1, 0), Math::clamp(angle, -turn, turn));
+		hv = direction * Math::move_toward(h_speed, speed, 16.0f * delta_f);
 	}
+	if (lunge_timer > 0.0f) {
+		lunge_timer -= delta_f;
+		if (knockback_timer <= 0) {
+			hv = move_direction * speed + facing_direction * 4.0f;
+		}
+	}
+	current_velocity.x = hv.x;
+	current_velocity.z = hv.z;
 
+	bool was_on_floor = is_on_floor();
 	set_velocity(current_velocity);
 	move_and_slide();
+	if (!was_on_floor && is_on_floor()) {
+		play_sfx("land");
+	}
 
 	// 4. Rotation: If attacking or firing secondary, cursor aiming overrides visual facing direction.
 	// Otherwise, if the movement vector is greater than zero, update the character's rotation
@@ -813,71 +830,93 @@ void PlayerController::_physics_process(double p_delta) {
 			}
 		}
 
-		if (visuals) {
-			Vector3 target_pos = visuals->get_global_position() + move_direction;
-			if (rotation_speed <= 0.0f) {
-				visuals->look_at(target_pos, Vector3(0.0f, 1.0f, 0.0f));
-			} else {
-				Basis target_basis = Basis::looking_at(move_direction, Vector3(0.0f, 1.0f, 0.0f));
-				Transform3D t = visuals->get_global_transform();
-				if (!t.basis.is_finite()) {
-					t.basis = Basis();
-				}
-				Vector3 current_scale = t.basis.get_scale();
-				if (!current_scale.is_finite() || current_scale.x < 0.001f || current_scale.y < 0.001f || current_scale.z < 0.001f) {
-					current_scale = Vector3(1.0f, 1.0f, 1.0f);
-				}
-				float rot_weight = static_cast<float>(Math::clamp(rotation_speed * p_delta, 0.0, 1.0));
-				t.basis = t.basis.slerp(target_basis, rot_weight).orthonormalized();
-				if (current_scale != Vector3(1.0f, 1.0f, 1.0f)) {
-					t.basis = t.basis.scaled(current_scale);
-				}
-				visuals->set_global_transform(t);
-			}
-		}
+		rotate_visuals(move_direction, p_delta);
 	}
 
-	// 5. Animation: Check movement vector / velocity when not attacking.
-	if (!anim_player) {
-		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-		if (!anim_player) {
-			anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-		}
-		if (!anim_player && visuals) {
-			anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer", true, false));
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer2", true, false));
-			}
-		}
+	process_animation();
+}
+
+void PlayerController::rotate_visuals(const Vector3 &p_direction, double p_delta) {
+	if (!visuals || p_direction.length_squared() < 0.0001f) {
+		return;
 	}
-	if (anim_player) {
-		if (!is_attacking && (current_state == STATE_NORMAL || current_state == STATE_AIRBORNE)) {
-			Vector3 vel = get_velocity();
-			float horizontal_speed_sq = vel.x * vel.x + vel.z * vel.z;
-			bool is_moving = (move_direction.length_squared() > 0.0001f || horizontal_speed_sq > 0.0001f);
+	Transform3D transform = visuals->is_inside_tree() ? visuals->get_global_transform() : visuals->get_transform();
+	Vector3 scale = transform.basis.get_scale();
+	Basis target_basis = Basis::looking_at(p_direction, Vector3(0, 1, 0));
+	float weight = Math::clamp(rotation_speed * static_cast<float>(p_delta), 0.0f, 1.0f);
+	transform.basis = transform.basis.orthonormalized().slerp(target_basis, weight).orthonormalized().scaled(scale);
+	if (visuals->is_inside_tree()) {
+		visuals->set_global_transform(transform);
+	} else {
+		visuals->set_transform(transform);
+	}
+}
 
-			if (is_moving) {
-				// Locomotion States: "Walking" when skates_equipped == false, "Running" when skates_equipped == true
-				String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
+void PlayerController::process_animation() {
+	if (!anim_player || is_attacking || current_state == STATE_EVADING || current_state == STATE_GRINDING || current_state == STATE_DEAD) {
+		return;
+	}
+	Vector3 hv = get_velocity();
+	hv.y = 0;
+	float speed = hv.length();
+	if (visuals) {
+		visuals->set_position(visuals_rest_position);
+	}
+	if (!is_on_floor() && !is_movement_locked) {
+		if (anim_player->has_animation("Running")) {
+			if (anim_player->get_assigned_animation() != StringName("Running") || anim_player->is_playing() || Math::abs(anim_player->get_current_animation_position() - 0.18) > 0.001) {
+				// Paused clips cannot advance blend weights; sample the frozen pose without a blend.
+				anim_player->play("Running", 0.0);
+				anim_player->seek(0.18, true);
+				anim_player->pause();
+			}
+		}
+	} else if (speed < 0.1f || is_movement_locked) {
+		if (anim_player->has_animation("Punch_Combo_1")) {
+			if (anim_player->get_assigned_animation() != StringName("Punch_Combo_1") || anim_player->is_playing() || Math::abs(anim_player->get_current_animation_position() - 2.10) > 0.001) {
 				anim_player->set_speed_scale(1.0f);
-
-				if (anim_player->get_current_animation() != anim_to_play || !anim_player->is_playing()) {
-					anim_player->play(anim_to_play);
-				}
-			} else {
-				// Idle State: Play "restpose" when movement input/velocity drops to zero in default state
-				String idle_anim = "restpose";
-				anim_player->set_speed_scale(1.0f);
-
-				if (anim_player->get_current_animation() != idle_anim || !anim_player->is_playing()) {
-					anim_player->play(idle_anim);
+				anim_player->play("Punch_Combo_1", 0.0);
+				anim_player->seek(2.10, true);
+				anim_player->pause();
+			}
+			// The authored guard clip raises both toes relative to the bind pose.
+			// Ground this frozen stance without altering the GLB scene transform.
+			Skeleton3D *skeleton = visuals ? Object::cast_to<Skeleton3D>(visuals->find_child("Skeleton3D", true, false)) : nullptr;
+			if (skeleton) {
+				int toe = skeleton->find_bone("mixamorig_LeftToe_End");
+				if (toe >= 0) {
+					Vector3 toe_pos = skeleton->get_global_transform().xform(skeleton->get_bone_global_pose(toe).origin);
+					Vector3 position = visuals_rest_position;
+					position.y -= Math::clamp(toe_pos.y - get_global_position().y - 0.05f, 0.0f, 0.3f);
+					visuals->set_position(position);
 				}
 			}
+		}
+	} else {
+		bool glide = (is_skating || is_equipped_skates) && speed >= 6.0f;
+		String clip = glide && anim_player->has_animation("Skate_Grind") ? "Skate_Grind" : "Running";
+		float rate = clip == "Skate_Grind" ? 1.0f : (glide ? 2.2f : Math::clamp(speed / 2.62f, 0.8f, 2.2f));
+		Input *input = Input::get_singleton();
+		bool aiming = input && (input->is_action_pressed("secondary_fire") || input->is_action_pressed("secondary_attack"));
+		if (aiming && facing_direction.dot(hv.normalized()) < -0.3f) {
+			rate = -rate;
+		}
+		anim_player->set_speed_scale(rate);
+		if (anim_player->has_animation(clip) && (anim_player->get_current_animation() != clip || !anim_player->is_playing())) {
+			anim_player->play(clip);
 		}
 	}
 }
 
 void PlayerController::_process(double p_delta) {
+	(void)p_delta;
+	if (hit_stop_end_msec != 0 && Time::get_singleton()->get_ticks_msec() >= hit_stop_end_msec) {
+		Engine::get_singleton()->set_time_scale(previous_time_scale);
+		hit_stop_end_msec = 0;
+	}
+}
+
+void PlayerController::dispatch_gameplay_input() {
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
 	}
@@ -887,23 +926,19 @@ void PlayerController::_process(double p_delta) {
 		return;
 	}
 
-	// 1. Walkman Tape Switch Trigger (T key)
-	bool is_t_pressed = input->is_key_pressed(Key::KEY_T);
-	if (is_t_pressed && !tape_key_was_pressed) {
+	InputMap *input_map = InputMap::get_singleton();
+	bool tape_pressed = input->is_action_just_pressed("switch_tape");
+	bool raw_t = input->is_key_pressed(Key::KEY_T);
+	if (tape_pressed || (raw_t && !tape_key_was_pressed)) {
 		switch_tape();
 	}
-	tape_key_was_pressed = is_t_pressed;
-
-	// 2. Equipment Toggle: Roller Skates (fallback if equip_skates action not defined)
-	InputMap *input_map = InputMap::get_singleton();
-	bool has_equip_skates = input_map && input_map->has_action("equip_skates");
-	if (!has_equip_skates) {
-		bool is_k_pressed = input->is_key_pressed(Key::KEY_K);
-		if (is_k_pressed && !skates_key_was_pressed) {
-			set_is_skating(!is_skating);
-		}
-		skates_key_was_pressed = is_k_pressed;
+	tape_key_was_pressed = raw_t;
+	bool skate_pressed = input->is_action_just_pressed("toggle_skates") || input->is_action_just_pressed("equip_skates");
+	bool raw_k = input->is_key_pressed(Key::KEY_K);
+	if (skate_pressed || (raw_k && !skates_key_was_pressed)) {
+		set_is_skating(!is_skating);
 	}
+	skates_key_was_pressed = raw_k;
 
 	// Attacks are disabled when movement is locked (e.g. in dialogue)
 	if (is_movement_locked) {
@@ -962,6 +997,24 @@ void PlayerController::_process(double p_delta) {
 			if (is_sec_just_pressed) {
 				fire_secondary();
 			}
+		}
+	}
+
+	// Evade / Power-Slide Trigger
+	bool evade_pressed = input->is_action_just_pressed("evade");
+	if (!evade_pressed && input_map && input_map->has_action("dodge")) {
+		evade_pressed = input->is_action_just_pressed("dodge");
+	}
+	if (!evade_pressed && (input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V))) {
+		if (!evade_key_was_pressed) {
+			evade_pressed = true;
+		}
+	}
+	evade_key_was_pressed = input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V);
+
+	if (evade_pressed && current_state != STATE_EVADING && current_state != STATE_GRINDING && !is_movement_locked) {
+		if (try_evade()) {
+			return;
 		}
 	}
 
@@ -1076,18 +1129,7 @@ bool PlayerController::orient_towards_point(const Vector3 &p_target_world_pos) {
 		}
 	}
 
-	if (visuals) {
-		if (visuals->is_inside_tree()) {
-			Vector3 visuals_pos = visuals->get_global_position();
-			Vector3 visuals_target = target_pos;
-			visuals_target.y = visuals_pos.y;
-			if (visuals_pos.distance_squared_to(visuals_target) > 0.01f) {
-				visuals->look_at(visuals_target, Vector3(0.0f, 1.0f, 0.0f));
-			}
-		} else {
-			visuals->set_basis(Basis::looking_at(aim_dir, Vector3(0.0f, 1.0f, 0.0f)));
-		}
-	}
+	rotate_visuals(aim_dir, get_physics_process_delta_time());
 
 	if (!attack_sensor) {
 		attack_sensor = Object::cast_to<Area3D>(find_child("AttackSensor", false, false));
@@ -1124,182 +1166,118 @@ bool PlayerController::orient_towards_cursor() {
 	return false;
 }
 
+float PlayerController::get_effective_bat_damage() const {
+	return base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f;
+}
+
 void PlayerController::attack() {
-	if (current_state == STATE_DEAD || attack_timer > 0.0f || is_movement_locked || is_attacking) {
+	// Melee cannot interrupt an evade; its exit always owns i-frame cleanup.
+	if (current_state == STATE_DEAD || current_state == STATE_EVADING || current_state == STATE_GRINDING || is_movement_locked) {
+		return;
+	}
+	if (is_attacking) {
+		if (attack_timer <= 0.15f && combo_hit < 3) {
+			combo_buffered = true;
+		}
 		return;
 	}
 	orient_towards_cursor();
+	set_state(STATE_ATTACKING);
+	start_combo_hit(1);
+}
+
+void PlayerController::start_combo_hit(int p_hit) {
+	combo_hit = p_hit;
+	combo_buffered = false;
 	is_attacking = true;
-	current_state = STATE_ATTACKING;
-
-	if (!anim_player) {
-		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-		if (!anim_player) {
-			anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-		}
-		if (!anim_player && visuals) {
-			anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer", true, false));
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(visuals->find_child("AnimationPlayer2", true, false));
-			}
-		}
+	attack_timer = 0.29f;
+	pending_hit_timer = p_hit == 2 ? 0.06f : 0.10f;
+	lunge_timer = 0.08f;
+	if (anim_player && anim_player->has_animation("Punch_Combo_1")) {
+		anim_player->set_speed_scale(2.4f);
+		anim_player->play("Punch_Combo_1");
+		anim_player->seek(p_hit == 1 ? 0.45 : (p_hit == 2 ? 0.80 : 1.15), true);
 	}
-	float duration = 2.3f / 2.0f;
-	if (anim_player) {
-		anim_player->set_speed_scale(2.0f);
-		if (anim_player->has_animation("Punch_Combo_1")) {
-			anim_player->play("Punch_Combo_1");
-		} else if (anim_player->has_animation("Attack")) {
-			anim_player->play("Attack");
-		} else {
-			anim_player->play("Punch_Combo_1");
-		}
-		double anim_len = anim_player->get_current_animation_length();
-		if (anim_len > 0.05) {
-			duration = static_cast<float>(anim_len / 2.0);
-		}
-	}
-	attack_timer = duration;
-
-	execute_bat_attack();
 }
 
 void PlayerController::execute_bat_attack() {
 	orient_towards_cursor();
-
-	// Damage scales with Strength stat
-	float damage = base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f;
-
-	UtilityFunctions::print("[Y2K-COMBAT] *SWING-CRACK!* Swung Baseball Bat! Effective STR: ", get_effective_strength(), " -> Dealing ", damage, " damage.");
-
-	if (!attack_sensor) {
-		attack_sensor = Object::cast_to<Area3D>(find_child("AttackSensor", false, false));
-		if (!attack_sensor) {
-			attack_sensor = Object::cast_to<Area3D>(find_child("WeaponHitbox", false, false));
-		}
-	}
-
-	Array hit_targets;
-
-	// 1. Strict spatial collision query using weapon Area3D / attack sensor
-	if (attack_sensor) {
-		attack_sensor->set_position(facing_direction * 1.2f + Vector3(0.0f, 0.5f, 0.0f));
-
-		// Query physically overlapping bodies (e.g. CharacterBody3D enemies like NeonCicada)
-		TypedArray<Node3D> overlapping_bodies = attack_sensor->get_overlapping_bodies();
-		for (int i = 0; i < overlapping_bodies.size(); i++) {
-			Node3D *body = Object::cast_to<Node3D>(overlapping_bodies[i]);
-			if (body && body != this) {
-				hit_targets.append(body);
-			}
-		}
-
-		// Query physically overlapping areas (e.g. Hurtbox on enemy scenes)
-		TypedArray<Area3D> overlapping_areas = attack_sensor->get_overlapping_areas();
-		for (int i = 0; i < overlapping_areas.size(); i++) {
-			Area3D *area = Object::cast_to<Area3D>(overlapping_areas[i]);
-			if (area && area != attack_sensor) {
-				Node *owner_node = area->get_parent();
-				if (owner_node && owner_node != this) {
-					hit_targets.append(owner_node);
-				} else {
-					hit_targets.append(area);
-				}
-			}
-		}
-	}
-
-	// 2. Direct arc-based spatial query fallback (strictly <= 2.5m reach & frontal cone)
-	// ensures combat works even if broadphase area cache was not updated in a synchronous script frame
-	if (hit_targets.is_empty()) {
-		Node *parent = get_parent();
-		if (parent) {
-			Array candidates;
-			TypedArray<Node> direct_children = parent->get_children();
-			for (int i = 0; i < direct_children.size(); i++) {
-				Node *child = Object::cast_to<Node>(direct_children[i]);
-				if (child && child != this) {
-					candidates.append(child);
-					if (child->get_name() == StringName("Enemies") || child->is_in_group("enemies")) {
-						TypedArray<Node> sub_children = child->get_children();
-						for (int j = 0; j < sub_children.size(); j++) {
-							candidates.append(sub_children[j]);
-						}
-					}
-				}
-			}
-
-			if (SceneTree *st = get_tree()) {
-				TypedArray<Node> boss_nodes = st->get_nodes_in_group("boss");
-				for (int i = 0; i < boss_nodes.size(); i++) {
-					Node *bn = Object::cast_to<Node>(boss_nodes[i]);
-					if (bn && !candidates.has(bn)) {
-						candidates.append(bn);
-					}
-				}
-			}
-
-			const float strict_reach = Math::min(attack_reach, 2.5f);
-			const float min_dot = 0.5f; // ~60 deg frontal cone
-			Vector3 my_pos = get_global_position();
-			int loop_iter = 0;
-			for (int i = 0; i < candidates.size(); i++) {
-				if (++loop_iter > 100) {
-					break;
-				}
-				Node3D *node_3d = Object::cast_to<Node3D>(candidates[i]);
-				if (node_3d && node_3d != this) {
-					Vector3 to_node = node_3d->get_global_position() - my_pos;
-					to_node.y = 0.0f;
-					float dist = to_node.length();
-					float allowed_reach = strict_reach;
-					if (node_3d->is_in_group("boss") || node_3d->get_name() == StringName("DialUpQueen")) {
-						allowed_reach = 4.8f;
-					}
-					if (dist <= allowed_reach && dist > 0.001f) {
-						Vector3 dir = to_node / dist;
-						if (facing_direction.dot(dir) >= min_dot) {
-							hit_targets.append(node_3d);
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// 3. Apply damage solely to valid distinct enemy targets
+	float multiplier = combo_hit == 3 ? 1.5f : 1.0f;
+	float damage = get_effective_bat_damage() * multiplier;
 	Array damaged_nodes;
-	for (int i = 0; i < hit_targets.size(); i++) {
-		Node *target = Object::cast_to<Node>(hit_targets[i]);
-		if (!target || damaged_nodes.has(target)) {
-			continue;
-		}
-
-		bool is_enemy = target->is_in_group("enemies") ||
-		                target->is_in_group("boss") ||
-		                (target->get_parent() && target->get_parent()->get_name() == StringName("Enemies")) ||
-		                target->has_method("take_damage");
-
-		if (is_enemy) {
-			damaged_nodes.append(target);
-			if (target->has_method("take_damage")) {
-				target->call("take_damage", static_cast<int>(damage), facing_direction);
-			} else {
-				MutatedBugEnemy *bug = Object::cast_to<MutatedBugEnemy>(target);
-				if (bug) {
-					bug->take_damage(damage);
+	if (attack_sensor && is_inside_tree()) {
+		// Area overlap caches lag a physics frame. Query the newly positioned shape directly.
+		attack_sensor->set_position(facing_direction * 1.2f + Vector3(0, 0.5f, 0));
+		CollisionShape3D *shape = Object::cast_to<CollisionShape3D>(attack_sensor->find_child("*", false, false));
+		if (shape && shape->get_shape().is_valid()) {
+			Ref<PhysicsShapeQueryParameters3D> query;
+			query.instantiate();
+			query->set_shape(shape->get_shape());
+			query->set_transform(shape->get_global_transform());
+			query->set_collision_mask(attack_sensor->get_collision_mask() & ~1u);
+			query->set_collide_with_areas(true);
+			TypedArray<RID> excluded;
+			excluded.append(get_rid());
+			excluded.append(attack_sensor->get_rid());
+			query->set_exclude(excluded);
+			TypedArray<Dictionary> hits = get_world_3d()->get_direct_space_state()->intersect_shape(query, 64);
+			for (int i = 0; i < hits.size(); ++i) {
+				Dictionary result = hits[i];
+				Node *target = Object::cast_to<Node>(result["collider"]);
+				if (Object::cast_to<Area3D>(target) && !target->has_method("take_damage")) {
+					target = target->get_parent();
 				}
+				Node3D *body = Object::cast_to<Node3D>(target);
+				if (!body || target == this || !target->has_method("take_damage") || damaged_nodes.has(target)) {
+					continue;
+				}
+				Vector3 offset = body->get_global_position() - get_global_position();
+				if (Math::abs(offset.y) > 2.0f) {
+					continue;
+				}
+				offset.y = 0;
+				float reach = target->is_in_group("boss") ? 4.8f : attack_reach;
+				if (offset.length() > reach || (offset.length_squared() > 0.001f && facing_direction.dot(offset.normalized()) < 0.5f)) {
+					continue;
+				}
+				damaged_nodes.append(target);
+				target->call("take_damage", static_cast<int>(damage), facing_direction * multiplier);
 			}
 		}
 	}
-
 	if (!damaged_nodes.is_empty()) {
 		play_sfx("hit");
+		hit_stop(combo_hit == 3 ? 0.10f : 0.06f);
+		add_camera_trauma(0.25f);
 	} else {
 		play_sfx("swing");
 	}
-
 	emit_signal("attack_executed", damage);
+}
+
+void PlayerController::add_camera_trauma(float p_amount) {
+	Node *rig = find_child("IsometricCameraRig", true, false);
+	if (rig && rig->has_method("add_trauma")) {
+		rig->call("add_trauma", p_amount);
+	}
+}
+
+void PlayerController::hit_stop(float p_duration) {
+	if (!is_inside_tree()) {
+		return;
+	}
+	if (hit_stop_end_msec == 0) {
+		previous_time_scale = Engine::get_singleton()->get_time_scale();
+	}
+	hit_stop_end_msec = Math::max(hit_stop_end_msec, Time::get_singleton()->get_ticks_msec() + static_cast<uint64_t>(p_duration * 1000));
+	Engine::get_singleton()->set_time_scale(0.05);
+}
+
+void PlayerController::_exit_tree() {
+	if (hit_stop_end_msec != 0) {
+		Engine::get_singleton()->set_time_scale(previous_time_scale);
+		hit_stop_end_msec = 0;
+	}
 }
 
 void PlayerController::switch_tape(const String &p_tape_name) {
@@ -1388,7 +1366,7 @@ void PlayerController::switch_tape(const String &p_tape_name) {
 		buff_desc = "Vitality +8, Vibe +8 (Stadium rock resilience & unshakeable team spirit!)";
 	}
 
-	float current_bat_dmg = base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f;
+	float current_bat_dmg = get_effective_bat_damage();
 	UtilityFunctions::print("[Y2K-WALKMAN] *CLACK!* Inserted cassette: '", current_tape, "' | Buff: ", buff_desc,
 		" | STR: ", get_effective_strength(), " (Bat DMG: ", current_bat_dmg, ")",
 		" | AGI: ", get_effective_agility(), " (Speed: ", get_movement_speed(), ")",
@@ -1564,7 +1542,8 @@ bool PlayerController::get_movement_locked() const {
 
 void PlayerController::set_movement_locked(bool p_locked) {
 	is_movement_locked = p_locked;
-	if (is_movement_locked) {
+	if (is_movement_locked && current_state != STATE_DEAD) {
+		set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
 		set_velocity(Vector3(0.0f, 0.0f, 0.0f));
 	}
 }
@@ -1574,39 +1553,10 @@ bool PlayerController::get_is_attacking() const {
 }
 
 void PlayerController::set_is_attacking(bool p_attacking) {
-	is_attacking = p_attacking;
-	if (is_attacking) {
-		current_state = STATE_ATTACKING;
-		if (attack_timer <= 0.0f) {
-			float duration = 2.3f / 2.0f;
-			if (anim_player) {
-				anim_player->set_speed_scale(2.0f);
-				double anim_len = anim_player->get_current_animation_length();
-				if (anim_len > 0.05) {
-					duration = static_cast<float>(anim_len / 2.0);
-				}
-			}
-			attack_timer = duration;
-		}
-	} else {
-		attack_timer = 0.0f;
-		current_state = STATE_NORMAL;
-		if (!anim_player) {
-			anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-			}
-		}
-		if (anim_player) {
-			float exit_speed = (is_skating || is_equipped_skates) ? 2.0f : 1.0f;
-			anim_player->set_speed_scale(exit_speed);
-			if (get_velocity().length() > 0.0001f) {
-				String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
-				anim_player->play(anim_to_play);
-			} else {
-				anim_player->play("restpose");
-			}
-		}
+	if (p_attacking) {
+		attack();
+	} else if (current_state == STATE_ATTACKING) {
+		set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
 	}
 }
 
@@ -1739,17 +1689,31 @@ void PlayerController::set_current_tape(const String &p_tape) {
 	switch_tape(p_tape);
 }
 
-void PlayerController::take_damage(float p_amount) {
-	if (current_state == STATE_DEAD) {
+void PlayerController::take_damage(float p_amount, const Vector3 &p_knockback) {
+	if (current_state == STATE_DEAD || is_invincible || hurt_invuln_timer > 0 || p_amount <= 0) {
 		return;
 	}
-	if (is_invincible || current_state == STATE_EVADING) {
-		UtilityFunctions::print("[Y2K-COMBAT] Evaded attack! (Invincibility frames active)");
-		return;
+	current_health = Math::max(0.0f, current_health - p_amount);
+	hurt_invuln_timer = 0.6f;
+	hurt_flash_timer = 0.18f;
+	if (hurt_overlay.is_valid()) {
+		hurt_overlay->set_albedo(Color(1, 1, 1));
+		for (int i = 0; i < skin_meshes.size(); ++i) {
+			Object::cast_to<MeshInstance3D>(skin_meshes[i])->set_material_overlay(hurt_overlay);
+		}
 	}
-	current_health = UtilityFunctions::maxf(0.0f, current_health - p_amount);
+	Vector3 direction = p_knockback;
+	direction.y = 0;
+	if (direction.length_squared() > 0.001f) {
+		Vector3 velocity = direction.normalized() * 7.0f;
+		velocity.y = get_velocity().y;
+		set_velocity(velocity);
+		knockback_timer = 0.12f;
+	}
+	play_sfx("hurt");
+	add_camera_trauma(0.45f);
+	emit_signal("player_hurt", p_amount);
 	emit_signal("health_changed", current_health, max_health);
-
 	if (current_health <= 0.0f) {
 		die();
 	}
@@ -1783,7 +1747,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * 0.4f;
 			float val = Math::clamp((sine * 0.6f + noise) * env, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "evade") {
 		samples = static_cast<int>(22050 * 0.22f);
@@ -1795,7 +1759,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f);
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
 			float val = Math::clamp((sine * 0.3f + noise * 0.7f) * env * 0.7f, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "death") {
 		samples = static_cast<int>(22050 * 0.75f);
@@ -1807,7 +1771,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float square = (Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f)) > 0.0f) ? 0.5f : -0.5f;
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * (t * 0.5f);
 			float val = Math::clamp((square + noise) * env * 0.8f, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "slam") {
 		samples = static_cast<int>(22050 * 0.3f);
@@ -1819,7 +1783,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * 0.5f;
 			float val = Math::clamp((sine * 0.8f + noise * 0.2f) * env, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "yum") {
 		// Juicy Gusher pop & sweet rising harmonic chime
@@ -1843,7 +1807,20 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 				val += (chime_sine + chime_harm) * chime_env * 0.55f;
 			}
 			val = Math::clamp(val, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "hurt" || type == "jump" || type == "land") {
+		float duration = type == "hurt" ? 0.15f : (type == "jump" ? 0.12f : 0.10f);
+		samples = static_cast<int>(22050 * duration);
+		data.resize(samples);
+		float phase = 0;
+		for (int i = 0; i < samples; ++i) {
+			float t = static_cast<float>(i) / samples;
+			float frequency = type == "hurt" ? Math::lerp(300.0f, 120.0f, t) : (type == "jump" ? Math::lerp(180.0f, 650.0f, t) : Math::lerp(110.0f, 45.0f, t));
+			phase += static_cast<float>(Math_TAU) * frequency / 22050.0f;
+			float wave = type == "hurt" ? (Math::sin(phase) > 0 ? 0.5f : -0.5f) : Math::sin(phase) * 0.6f;
+			float val = wave * (1.0f - t) * (1.0f - t);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else {
 		samples = static_cast<int>(22050 * 0.08f);
@@ -1852,7 +1829,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float t = static_cast<float>(i) / samples;
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * 500.0f / 22050.0f));
 			float val = sine * (1.0f - t);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	}
 
@@ -1860,22 +1837,45 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 	return wav;
 }
 
-void PlayerController::play_sfx(const String &p_name) {
+void PlayerController::setup_sfx() {
+	if (sfx_pool[0]) {
+		return;
+	}
+	sfx_audio = Object::cast_to<AudioStreamPlayer>(find_child("SFXAudio", false, false));
 	if (!sfx_audio) {
-		sfx_audio = Object::cast_to<AudioStreamPlayer>(find_child("SFXAudio", true, false));
-		if (!sfx_audio) {
-			sfx_audio = memnew(AudioStreamPlayer);
-			sfx_audio->set_name("SFXAudio");
-			add_child(sfx_audio);
-		}
+		sfx_audio = memnew(AudioStreamPlayer);
+		sfx_audio->set_name("SFXAudio");
+		add_child(sfx_audio);
 	}
-	if (sfx_audio) {
-		Ref<AudioStreamWAV> stream = create_sfx_stream(p_name);
-		sfx_audio->set_stream(stream);
-		if (sfx_audio->is_inside_tree()) {
-			sfx_audio->play();
-		}
+
+	sfx_pool[0] = sfx_audio;
+	for (int i = 1; i < 4; ++i) {
+		sfx_pool[i] = memnew(AudioStreamPlayer);
+		sfx_pool[i]->set_name(String("SFXAudio") + String::num_int64(i));
+		add_child(sfx_pool[i]);
 	}
+	for (const char *name : { "hit", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land" }) {
+		sfx_cache[name] = create_sfx_stream(name);
+	}
+
+}
+
+void PlayerController::play_sfx(const String &p_name) {
+	// Keep the existing off-tree play_sfx API usable by script callers.
+	setup_sfx();
+	AudioStreamPlayer *voice = sfx_pool[sfx_voice];
+	if (!voice) {
+		return;
+	}
+	if (!sfx_cache.has(p_name)) {
+		sfx_cache[p_name] = create_sfx_stream(p_name);
+	}
+	Ref<AudioStream> stream = sfx_cache[p_name];
+	voice->set_stream(stream);
+	if (voice->is_inside_tree()) {
+		voice->play();
+	}
+	sfx_voice = (sfx_voice + 1) % 4;
 }
 
 bool PlayerController::is_dead() const {
@@ -1887,7 +1887,7 @@ void PlayerController::die() {
 		return;
 	}
 
-	current_state = STATE_DEAD;
+	set_state(STATE_DEAD);
 	current_health = 0.0f;
 	death_timer = 2.5f;
 	is_invincible = true;
@@ -2008,7 +2008,7 @@ void PlayerController::set_flame_particles(GPUParticles3D *p_particles) {
 }
 
 bool PlayerController::try_start_grind(Path3D *p_path) {
-	if (current_state == STATE_DEAD || !p_path || current_state == STATE_GRINDING || grind_cooldown > 0.0f) {
+	if (current_state == STATE_DEAD || !p_path || current_state == STATE_GRINDING || current_state == STATE_ATTACKING || current_state == STATE_EVADING || is_movement_locked || grind_cooldown > 0.0f) {
 		return false;
 	}
 	if (!is_skating && !is_equipped_skates) {
@@ -2019,7 +2019,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 	float speed = vel.length();
 	float horiz_speed = Math::sqrt(vel.x * vel.x + vel.z * vel.z);
 	// Minimum threshold: > 4.0 m/s
-	if (horiz_speed < 4.0f && speed < 4.0f) {
+	if (horiz_speed < 4.0f || (is_on_floor() && recent_jump_timer <= 0.0f)) {
 		return false;
 	}
 
@@ -2049,7 +2049,11 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 		world_tangent.normalize();
 	}
 
-	float dot = vel.dot(world_tangent);
+	Vector3 hv(vel.x, 0, vel.z);
+	if (world_tangent.length_squared() < 0.001f || Math::abs(hv.normalized().dot(world_tangent)) < 0.5f) {
+		return false;
+	}
+	float dot = hv.dot(world_tangent);
 	grind_direction = (dot >= 0.0f) ? 1.0f : -1.0f;
 
 	// Translate entry velocity into progression speed along rail
@@ -2067,27 +2071,11 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 	grind_path_follow->set_loop(false);
 	grind_path_follow->set_progress(closest_offset);
 
-	// Snap player's root transform to the nearest point on the rail
-	Vector3 snapped_pos;
-	if (grind_path_follow && grind_path_follow->is_inside_tree()) {
-		snapped_pos = grind_path_follow->get_global_position();
-	} else {
-		Vector3 curve_point = curve->sample_baked(closest_offset);
-		if (p_path->is_inside_tree()) {
-			snapped_pos = p_path->get_global_transform().xform(curve_point);
-		} else {
-			snapped_pos = p_path->get_position() + curve_point;
-		}
-	}
-	snapped_pos.y += 0.3f; // Align feet with rail top
-	if (is_inside_tree()) {
-		set_global_position(snapped_pos);
-	} else {
-		set_position(snapped_pos);
-	}
+	// Smooth the entry from this root position over the next 0.06 seconds.
+	grind_entry_position = player_pos;
 
 	current_grind_path = p_path;
-	current_state = STATE_GRINDING;
+	set_state(STATE_GRINDING);
 
 	// Align visuals facing along rail upon entry
 	Vector3 face_dir = world_tangent * (grind_direction >= 0.0f ? 1.0f : -1.0f);
@@ -2101,20 +2089,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 			visuals = Object::cast_to<Node3D>(find_child("Visuals", true, false));
 		}
 	}
-	if (visuals) {
-		if (visuals->is_inside_tree()) {
-			Vector3 vis_pos = visuals->get_global_position();
-			Vector3 target_pos = vis_pos + facing_direction;
-			if (vis_pos.distance_squared_to(target_pos) > 0.0001f) {
-				visuals->look_at(target_pos, Vector3(0.0f, 1.0f, 0.0f));
-			}
-		} else {
-			Basis tb = Basis::looking_at(facing_direction, Vector3(0.0f, 1.0f, 0.0f));
-			Transform3D vt = visuals->get_transform();
-			vt.basis = tb;
-			visuals->set_transform(vt);
-		}
-	}
+	rotate_visuals(facing_direction, get_physics_process_delta_time());
 
 	// Animation State: Explicitly command AnimationPlayer to play "Skate_Grind"
 	if (!anim_player) {
@@ -2137,7 +2112,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 		} else if (anim_player->has_animation("Grind")) {
 			anim_player->play("Grind");
 		} else {
-			anim_player->play("Skate_Grind");
+			anim_player->play("Running");
 		}
 	}
 
@@ -2157,17 +2132,11 @@ void PlayerController::dismount_grind(const Vector3 &p_exit_velocity) {
 		exit_vel.y = 2.5f;
 	}
 
-	current_state = STATE_NORMAL;
-	current_grind_path = nullptr;
-	grind_path_follow = nullptr;
-	grind_progress = 0.0f;
-	grind_elapsed_time = 0.0f;
-	grind_cooldown = 0.5f;
-
-	set_velocity(exit_vel);
-	if (is_inside_tree()) {
-		move_and_slide();
+	if (current_state != STATE_GRINDING) {
+		return;
 	}
+	set_velocity(exit_vel);
+	set_state(STATE_AIRBORNE);
 
 	if (!anim_player) {
 		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
@@ -2189,7 +2158,6 @@ void PlayerController::dismount_grind(const Vector3 &p_exit_velocity) {
 	}
 
 	UtilityFunctions::print("[Y2K-GRIND] <<< EXITED STATE_GRINDING! Restored exit momentum: ", exit_vel);
-	emit_signal("grind_ended", exit_vel);
 }
 
 void PlayerController::_on_grind_area_entered(Area3D *p_area) {
@@ -2215,7 +2183,54 @@ PlayerController::MovementState PlayerController::get_movement_state() const {
 }
 
 void PlayerController::set_movement_state(PlayerController::MovementState p_state) {
+	set_state(p_state);
+}
+
+void PlayerController::set_state(MovementState p_state) {
+	if (p_state < STATE_NORMAL || p_state > STATE_DEAD || p_state == current_state) {
+		return;
+	}
+	switch (current_state) {
+		case STATE_EVADING:
+			is_invincible = false;
+			evade_timer = 0;
+			evade_cooldown = evade_cooldown_max;
+			emit_signal("evade_ended");
+			break;
+		case STATE_ATTACKING:
+			is_attacking = false;
+			attack_timer = 0;
+			pending_hit_timer = -1;
+			lunge_timer = 0;
+			combo_buffered = false;
+			combo_hit = 0;
+			break;
+		case STATE_GRINDING:
+			current_grind_path = nullptr;
+			grind_path_follow = nullptr;
+			grind_progress = 0;
+			grind_elapsed_time = 0;
+			grind_cooldown = 0.5f;
+			emit_signal("grind_ended", get_velocity());
+			break;
+		case STATE_DEAD:
+			is_invincible = false;
+			death_timer = 0;
+			break;
+		default:
+			break;
+	}
 	current_state = p_state;
+	if (visuals) {
+		visuals->set_position(visuals_rest_position);
+	}
+	if (p_state == STATE_ATTACKING) {
+		is_attacking = true;
+	}
+	if (p_state == STATE_DEAD) {
+		pending_slam = false;
+		jump_buffer_timer = coyote_timer = 0;
+	}
 }
 
 bool PlayerController::is_grinding() const {
@@ -2257,10 +2272,6 @@ void PlayerController::set_attack_sensor(Area3D *p_sensor) {
 }
 
 void PlayerController::simulate_physics(double p_delta) {
-	if (!flame_particles || !visuals) {
-		_ready();
-	}
-	_process(p_delta);
 	_physics_process(p_delta);
 }
 
@@ -2295,7 +2306,10 @@ bool PlayerController::try_evade() {
 }
 
 void PlayerController::start_evade(const Vector3 &p_direction) {
-	current_state = STATE_EVADING;
+	if (is_movement_locked || current_state == STATE_DEAD || current_state == STATE_GRINDING || current_state == STATE_EVADING || evade_cooldown > 0) {
+		return;
+	}
+	set_state(STATE_EVADING);
 	evade_direction = p_direction.length_squared() > 0.001f ? p_direction.normalized() : facing_direction;
 	facing_direction = evade_direction;
 	evade_timer = evade_duration;
@@ -2307,10 +2321,7 @@ void PlayerController::start_evade(const Vector3 &p_direction) {
 			visuals = Object::cast_to<Node3D>(find_child("Visuals", true, false));
 		}
 	}
-	if (visuals && visuals->is_inside_tree()) {
-		Vector3 target = visuals->get_global_position() + evade_direction;
-		visuals->look_at(target, Vector3(0.0f, 1.0f, 0.0f));
-	}
+	rotate_visuals(evade_direction, get_physics_process_delta_time());
 
 	if (!anim_player) {
 		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
@@ -2328,7 +2339,7 @@ void PlayerController::start_evade(const Vector3 &p_direction) {
 		}
 	}
 
-	UtilityFunctions::print("[Y2K-MOVEMENT] >>> POWER-SLIDE EVADE! Boost: ", evade_speed, " m/s (Invincible for ", evade_duration, "s)");
+	UtilityFunctions::print("[Y2K-MOVEMENT] >>> POWER-SLIDE EVADE! Boost: ", evade_speed, " m/s (Invincible for ", 0.18f, "s)");
 	play_sfx("evade");
 	emit_signal("evade_started", evade_direction, evade_speed);
 }
@@ -2360,6 +2371,8 @@ void PlayerController::execute_grind_slam(const Vector3 &p_direction) {
 	float slam_damage = base_slam_damage + static_cast<float>(get_effective_strength()) * 3.0f + (current_adrenaline * 0.25f);
 	UtilityFunctions::print("[Y2K-GRIND] *BOOM!* Rail Dismount Shockwave Slam! Dealing ", slam_damage, " damage (Radius: ", slam_radius, "m)");
 	play_sfx("slam");
+	hit_stop(0.10f);
+	add_camera_trauma(0.6f);
 
 	// Visual Shockwave Effect (CylinderMesh with transparent, unshaded StandardMaterial3D)
 	MeshInstance3D *shockwave = memnew(MeshInstance3D);
@@ -2780,7 +2793,8 @@ void PlayerController::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "is_attacking"), "set_is_attacking", "get_is_attacking");
 
 	ClassDB::bind_method(D_METHOD("attack"), &PlayerController::attack);
-	ClassDB::bind_method(D_METHOD("take_damage", "amount"), &PlayerController::take_damage);
+	ClassDB::bind_method(D_METHOD("get_effective_bat_damage"), &PlayerController::get_effective_bat_damage);
+	ClassDB::bind_method(D_METHOD("take_damage", "amount", "knockback"), &PlayerController::take_damage, DEFVAL(Vector3()));
 	ClassDB::bind_method(D_METHOD("heal", "amount"), &PlayerController::heal);
 
 	// Walkman System
@@ -2864,6 +2878,7 @@ void PlayerController::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("play_sfx", "name"), &PlayerController::play_sfx);
 
 	// Signals
+	ADD_SIGNAL(MethodInfo("player_hurt", PropertyInfo(Variant::FLOAT, "amount")));
 	ADD_SIGNAL(MethodInfo("attack_executed", PropertyInfo(Variant::FLOAT, "damage")));
 	ADD_SIGNAL(MethodInfo("health_changed", PropertyInfo(Variant::FLOAT, "current_health"), PropertyInfo(Variant::FLOAT, "max_health")));
 	ADD_SIGNAL(MethodInfo("stats_changed"));

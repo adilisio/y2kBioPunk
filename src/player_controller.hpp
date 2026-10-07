@@ -18,6 +18,7 @@
 #include <godot_cpp/classes/path_follow3d.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/sphere_shape3d.hpp>
+#include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/plane.hpp>
@@ -60,6 +61,7 @@ public:
 private:
 	// Traversal State Machine
 	MovementState current_state = STATE_NORMAL;
+	bool ready_initialized = false;
 	Path3D *current_grind_path = nullptr;
 	PathFollow3D *grind_path_follow = nullptr;
 	float grind_progress = 0.0f;
@@ -67,6 +69,9 @@ private:
 	float grind_speed = 12.0f;
 	float grind_cooldown = 0.0f;
 	float grind_elapsed_time = 0.0f;
+	Vector3 grind_entry_position;
+	bool pending_slam = false;
+	Vector3 pending_slam_direction;
 	Area3D *grind_sensor = nullptr;
 
 	// Adrenaline Meter Core
@@ -78,11 +83,11 @@ private:
 	float slam_radius = 4.5f;
 
 	// Evade / Power-Slide State
-	float evade_duration = 0.35f;
+	float evade_duration = 0.22f;
 	float evade_timer = 0.0f;
 	float evade_cooldown = 0.0f;
-	float evade_cooldown_max = 0.8f;
-	float evade_speed = 18.0f;
+	float evade_cooldown_max = 0.35f;
+	float evade_speed = 24.0f;
 	Vector3 evade_direction = Vector3(0.0f, 0.0f, 1.0f);
 	bool is_invincible = false;
 	bool evade_key_was_pressed = false;
@@ -114,14 +119,30 @@ private:
 	bool is_equipped_skates = false; // Default: responsive 3D walking
 	bool is_movement_locked = false; // Pauses movement during dialogue / menus
 	Vector3 facing_direction = Vector3(0.0f, 0.0f, 1.0f);
-	float rotation_speed = 12.0f;
-	float gravity = 9.8f;
+	float rotation_speed = 25.0f;
+	float gravity = 22.0f;
+	float fall_gravity = 36.0f;
+	float coyote_timer = 0.0f;
+	float jump_buffer_timer = 0.0f;
+	float recent_jump_timer = 0.0f;
 	float base_movement_speed = 6.0f;
-	float jump_velocity = 6.0f;
+	float jump_velocity = 7.2f;
 
 	// Combat: Baseball Bat Melee Attack
-	float attack_cooldown = 0.8f;
 	float attack_timer = 0.0f;
+	float pending_hit_timer = -1.0f;
+	float lunge_timer = 0.0f;
+	int combo_hit = 0;
+	bool combo_buffered = false;
+	uint64_t hit_stop_end_msec = 0;
+	double previous_time_scale = 1.0;
+	float hurt_invuln_timer = 0.0f;
+	float hurt_flash_timer = 0.0f;
+	float knockback_timer = 0.0f;
+	Vector3 observed_velocity;
+	Array skin_meshes;
+	Array skin_overlays;
+	Ref<StandardMaterial3D> hurt_overlay;
 	float base_attack_damage = 15.0f;
 	float attack_reach = 2.5f;
 	bool is_attacking = false;
@@ -134,15 +155,28 @@ private:
 	bool skates_key_was_pressed = false;
 	AudioStreamPlayer *walkman_audio = nullptr;
 	AudioStreamPlayer *sfx_audio = nullptr;
+	AudioStreamPlayer *sfx_pool[4] = { nullptr, nullptr, nullptr, nullptr };
+	int sfx_voice = 0;
+	Dictionary sfx_cache;
 
 	// Visuals & Animation
 	Node3D *visuals = nullptr;
+	Vector3 visuals_rest_position;
 	AnimationPlayer *anim_player = nullptr;
 	GPUParticles3D *flame_particles = nullptr;
 
 	Vector2 get_raw_input_direction() const;
 	void execute_bat_attack();
 	void recalculate_derived_stats();
+	void process_animation();
+	void rotate_visuals(const Vector3 &p_direction, double p_delta);
+	void start_combo_hit(int p_hit);
+	void hit_stop(float p_duration);
+	void add_camera_trauma(float p_amount);
+	void step_physics(double p_delta);
+	void dispatch_gameplay_input();
+	void setup_sfx();
+	void set_state(MovementState p_state);
 
 protected:
 	static void _bind_methods();
@@ -154,6 +188,7 @@ public:
 	void _ready() override;
 	void _physics_process(double p_delta) override;
 	void _process(double p_delta) override;
+	void _exit_tree() override;
 
 	// XP & Leveling
 	int get_level() const;
@@ -214,7 +249,8 @@ public:
 	bool get_is_attacking() const;
 	void set_is_attacking(bool p_attacking);
 	void attack();
-	void take_damage(float p_amount);
+	float get_effective_bat_damage() const;
+	void take_damage(float p_amount, const Vector3 &p_knockback = Vector3());
 	void heal(float p_amount);
 	Area3D *get_attack_sensor() const;
 	void set_attack_sensor(Area3D *p_sensor);

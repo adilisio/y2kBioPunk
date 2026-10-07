@@ -223,8 +223,8 @@ func _enter_windup(dir: Vector3) -> void:
 		cue.tween_property(visual_mesh, "scale", Vector3(1.4, 0.8, 1.4), 0.25)
 		cue.tween_property(visual_mesh, "scale", Vector3.ONE, 0.25)
 		var pulse := create_tween()
-		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 3.0, 0.25)
-		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 1.0, 0.25)
+		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 0.9, 0.25)
+		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 0.45, 0.25)
 	print("[NeonDialUpCicada] wind-up (0.5s)")
 
 func _process_windup(delta: float) -> void:
@@ -274,7 +274,8 @@ func _flash_hit_visual() -> void:
 		var flash_mat = StandardMaterial3D.new()
 		flash_mat.albedo_color = Color(1.0, 0.1, 0.1, 1.0)
 		flash_mat.emission_enabled = true
-		flash_mat.emission = Color(1.0, 0.25, 0.25, 1.0)
+		flash_mat.emission = Color(1.0, 0.15, 0.15, 1.0)
+		flash_mat.emission_energy_multiplier = 0.45  # the scene runs ACES + glow; keep the red from blowing out to white
 		visual_mesh.material_override = flash_mat
 
 		if flash_tween and flash_tween.is_valid():

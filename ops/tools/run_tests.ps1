@@ -93,14 +93,12 @@ foreach ($testFile in $TestFiles) {
     $TimedOut = $false
     $ExitCode = -1
 
-    # Launch headless Godot via ProcessStartInfo to reliably capture exit codes and output
-    $pinfo = New-Object System.Diagnostics.ProcessStartInfo
-    $pinfo.FileName = "cmd.exe"
-    $pinfo.Arguments = "/c `"`"$GodotBin`" --headless --path `"$RepoRoot`" -s `"$TestRelPath`" > `"$TempLog`" 2>&1`""
-    $pinfo.UseShellExecute = $false
-    $pinfo.CreateNoWindow = $true
-
-    $Proc = [System.Diagnostics.Process]::Start($pinfo)
+    # Launch headless Godot directly (no cmd.exe wrapper) so the exit code is Godot's own and
+    # a timeout kills only THIS process, never other agents' Godot instances in other worktrees.
+    $TempErr = "$TempLog.err"
+    $Proc = Start-Process -FilePath $GodotBin -ArgumentList @("--headless", "--path", "`"$RepoRoot`"", "-s", "`"$TestRelPath`"") `
+        -RedirectStandardOutput $TempLog -RedirectStandardError $TempErr -PassThru -NoNewWindow
+    $null = $Proc.Handle  # PowerShell 5.1 quirk: cache the handle or ExitCode reads back empty
     $Finished = $Proc.WaitForExit($TimeoutSeconds * 1000)
 
     $Sw.Stop()
@@ -108,21 +106,25 @@ foreach ($testFile in $TestFiles) {
 
     if (-not $Finished) {
         $TimedOut = $true
-        try {
-            $Proc.Kill()
-            # Also kill any child Godot processes
-            Get-Process -Name Godot* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-        } catch {}
+        try { $Proc.Kill() } catch {}
         $ExitCode = -124
     } else {
         $ExitCode = $Proc.ExitCode
     }
 
+    # Redirected file handles can linger a moment after exit; retry the read briefly.
     $OutputContent = ""
-    if (Test-Path $TempLog) {
-        $OutputContent = [System.IO.File]::ReadAllText($TempLog)
-        Remove-Item -Path $TempLog -Force -ErrorAction SilentlyContinue
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        try {
+            $out = if (Test-Path $TempLog) { [System.IO.File]::ReadAllText($TempLog) } else { "" }
+            $err = if (Test-Path $TempErr) { [System.IO.File]::ReadAllText($TempErr) } else { "" }
+            $OutputContent = $out + "`n" + $err
+            break
+        } catch {
+            Start-Sleep -Milliseconds 250
+        }
     }
+    Remove-Item -Path $TempLog, $TempErr -Force -ErrorAction SilentlyContinue
 
     [void]$LogBuffer.AppendLine($OutputContent)
     [void]$LogBuffer.AppendLine("--- END: $TestRelPath (ExitCode: $ExitCode, Time: ${DurationSec}s) ---`n")

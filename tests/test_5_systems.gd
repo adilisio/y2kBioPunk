@@ -80,8 +80,8 @@ func run_tests() -> void:
 	check(queen.has_signal("boss_defeated"), "Boss must have boss_defeated signal")
 
 	# Instantiate HUD and test boss bar integration
-	var hud_scene = load("res://scenes/main.tscn")
-	check(hud_scene != null, "main.tscn must load")
+	var hud_scene = load("res://scenes/FloodedMall_Greybox.tscn")
+	check(hud_scene != null, "mall scene must load")
 	var main_node = hud_scene.instantiate()
 	TestUtil.track(main_node)
 	root.add_child(main_node)

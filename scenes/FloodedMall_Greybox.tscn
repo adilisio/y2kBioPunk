@@ -2291,7 +2291,7 @@ size = Vector3(0.9, 1.2, 2.19908)
 size = Vector3(0.9, 1.2, 2.19908)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_boss_trigger"]
-size = Vector3(16, 5, 16)
+size = Vector3(14, 5, 6)
 
 [node name="FloodedMall_Greybox" type="Node3D"]
 script = ExtResource("1_lhdc1")
@@ -3627,7 +3627,8 @@ material = SubResource("StandardMaterial3D_6lw4d")
 [node name="Enemies" type="Node3D" parent="."]
 
 [node name="BossEncounterTrigger" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -12)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -19)
+spawn_position = Vector3(0, 1.5, -21.5)
 collision_layer = 0
 collision_mask = 7
 script = ExtResource("8_boss_trigger")

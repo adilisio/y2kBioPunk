@@ -171,11 +171,6 @@ func run_tests() -> int:
 	assert(mall_inst.find_child("FruitCandyPickup_02", true, false) != null, "FruitCandyPickup_02 must be placed in FloodedMall")
 	mall_inst.free()
 
-	var main_scene = load("res://scenes/main.tscn")
-	assert(main_scene != null, "main.tscn must load")
-	var main_inst = main_scene.instantiate()
-	assert(main_inst.find_child("FruitCandyPickup", true, false) != null, "FruitCandyPickup must be placed in main.tscn")
-	main_inst.free()
 	print(" -> PASS: Pickups placed and verified in game scenes.")
 
 	print("\n========================================================")

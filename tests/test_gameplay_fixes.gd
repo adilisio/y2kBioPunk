@@ -153,27 +153,20 @@ func run_tests() -> void:
 
 	check(trigger.get_remaining_enemies_count() == 1, "Remaining enemies count must be 1")
 
-	# Player enters trigger while dummy enemy is still alive: Boss must NOT spawn
+	# Design (WP-1): the boss arena gate fires on ENTRY regardless of remaining enemies.
+	# Re-clearing the mall after every death was the single worst retry-loop problem.
 	trigger._on_body_entered(player)
+	await process_frame
 	check(trigger.player_inside == true, "Player should be recognized inside trigger")
-	check(trigger.triggered == false, "Trigger must NOT fire while atrium enemies remain")
-	check(arena.get_node_or_null("DialUpQueen") == null, "DialUpQueen must NOT spawn while enemies remain")
-
-	# Now eliminate the dummy enemy
+	check(trigger.triggered == true, "Trigger fires on entry even while enemies remain")
+	var spawned_boss = arena.get_node_or_null("DialUpQueen")
+	check(spawned_boss != null, "DialUpQueen spawns on arena entry")
+	check(spawned_boss != null and spawned_boss.is_in_group("boss"), "Spawned queen is in group 'boss'")
 	dummy_enemy.remove_from_group("enemies")
 	dummy_enemy.queue_free()
 	await process_frame
 
-	check(trigger.get_remaining_enemies_count() == 0, "Remaining enemies count must now be 0")
-
-	# Simulate process tick with player still inside
-	trigger._process(0.016)
-
-	check(trigger.triggered == true, "Trigger must activate when enemies count reaches 0")
-	var spawned_boss = arena.get_node_or_null("DialUpQueen")
-	check(spawned_boss != null, "DialUpQueen must be spawned in arena after clearing enemies")
-
-	print(">>> [TEST 3 PASSED] Boss spawn pacing validated: requires clearing atrium enemies before summoning.\n")
+	print(">>> [TEST 3 PASSED] Boss gate validated: queen spawns on arena entry.\n")
 
 	print("========================================================")
 	print(">>> ALL 3 GAMEPLAY FIXES VALIDATION COMPLETED! <<<")

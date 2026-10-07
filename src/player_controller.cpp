@@ -427,6 +427,10 @@ void PlayerController::step_physics(double p_delta) {
 		flame_tick_timer -= delta_f;
 	}
 
+	if (!is_movement_locked) {
+		dispatch_gameplay_input();
+	}
+
 	// =========================================================================
 	// STATE_GRINDING: Rail Spline Traversal & Adrenaline Generation
 	// =========================================================================
@@ -638,10 +642,7 @@ void PlayerController::step_physics(double p_delta) {
 		move_and_slide();
 		rotate_visuals(evade_direction, p_delta);
 		if (evade_timer <= 0) {
-			is_invincible = false;
-			current_state = is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE;
-			evade_cooldown = evade_cooldown_max;
-			emit_signal("evade_ended");
+			set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
 			process_animation();
 		}
 		return;
@@ -651,11 +652,11 @@ void PlayerController::step_physics(double p_delta) {
 	if (!is_on_floor()) {
 		current_velocity.y -= (current_velocity.y < 0 ? fall_gravity : gravity) * delta_f;
 		if (current_state == STATE_NORMAL && !is_attacking) {
-			current_state = STATE_AIRBORNE;
+			set_state(STATE_AIRBORNE);
 		}
 	} else {
 		if (current_state == STATE_AIRBORNE) {
-			current_state = STATE_NORMAL;
+			set_state(STATE_NORMAL);
 		}
 	}
 
@@ -666,8 +667,7 @@ void PlayerController::step_physics(double p_delta) {
 		set_velocity(current_velocity);
 		move_and_slide();
 		if (anim_player) {
-			anim_player->set_speed_scale(1.0f);
-			anim_player->play("restpose");
+			process_animation();
 		}
 		return;
 	}
@@ -686,7 +686,7 @@ void PlayerController::step_physics(double p_delta) {
 				start_combo_hit(combo_hit + 1);
 			} else {
 				is_attacking = false;
-				current_state = is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE;
+				set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
 			}
 		}
 	}
@@ -694,49 +694,18 @@ void PlayerController::step_physics(double p_delta) {
 	// Check if input actions were just pressed
 	Input *input = Input::get_singleton();
 	if (input) {
-		InputMap *input_map = InputMap::get_singleton();
-		if (input_map && input_map->has_action("equip_skates")) {
-			if (input->is_action_just_pressed("equip_skates")) {
-				set_is_skating(!is_skating);
-			}
-		}
 
 		if (jump_buffer_timer > 0 && coyote_timer > 0 && !is_attacking) {
 			current_velocity.y = jump_velocity;
 			play_sfx("jump");
 			jump_buffer_timer = coyote_timer = 0.0f;
-			current_state = STATE_AIRBORNE;
+			set_state(STATE_AIRBORNE);
 		}
 		if (input->is_action_just_released("jump") && current_velocity.y > 0) {
 			current_velocity.y *= 0.5f;
 		}
 
-		// Evade / Power-Slide Trigger
-		bool evade_pressed = input->is_action_just_pressed("evade");
-		if (!evade_pressed && input_map && input_map->has_action("dodge")) {
-			evade_pressed = input->is_action_just_pressed("dodge");
-		}
-		if (!evade_pressed && (input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V))) {
-			if (!evade_key_was_pressed) {
-				evade_pressed = true;
-			}
-		}
-		evade_key_was_pressed = input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V);
 
-		if (evade_pressed && current_state != STATE_EVADING && current_state != STATE_GRINDING && !is_movement_locked) {
-			if (try_evade()) {
-				return;
-			}
-		}
-
-		// Combat Attack Trigger: Check if Input::get_singleton()->is_action_just_pressed("attack") and !is_attacking
-		bool is_attack_just_pressed = input->is_action_just_pressed("attack");
-		if (!is_attack_just_pressed && input_map && input_map->has_action("bat_swing")) {
-			is_attack_just_pressed = input->is_action_just_pressed("bat_swing");
-		}
-		if (is_attack_just_pressed) {
-			attack();
-		}
 	}
 
 	// Check for grind rail collisions
@@ -864,28 +833,7 @@ void PlayerController::step_physics(double p_delta) {
 			}
 		}
 
-		if (visuals) {
-			Vector3 target_pos = visuals->get_global_position() + move_direction;
-			if (rotation_speed <= 0.0f) {
-				visuals->look_at(target_pos, Vector3(0.0f, 1.0f, 0.0f));
-			} else {
-				Basis target_basis = Basis::looking_at(move_direction, Vector3(0.0f, 1.0f, 0.0f));
-				Transform3D t = visuals->get_global_transform();
-				if (!t.basis.is_finite()) {
-					t.basis = Basis();
-				}
-				Vector3 current_scale = t.basis.get_scale();
-				if (!current_scale.is_finite() || current_scale.x < 0.001f || current_scale.y < 0.001f || current_scale.z < 0.001f) {
-					current_scale = Vector3(1.0f, 1.0f, 1.0f);
-				}
-				float rot_weight = static_cast<float>(Math::clamp(rotation_speed * p_delta, 0.0, 1.0));
-				t.basis = t.basis.slerp(target_basis, rot_weight).orthonormalized();
-				if (current_scale != Vector3(1.0f, 1.0f, 1.0f)) {
-					t.basis = t.basis.scaled(current_scale);
-				}
-				visuals->set_global_transform(t);
-			}
-		}
+		rotate_visuals(move_direction, p_delta);
 	}
 
 	process_animation();
@@ -944,10 +892,14 @@ void PlayerController::process_animation() {
 }
 
 void PlayerController::_process(double p_delta) {
+	(void)p_delta;
 	if (hit_stop_end_msec != 0 && Time::get_singleton()->get_ticks_msec() >= hit_stop_end_msec) {
 		Engine::get_singleton()->set_time_scale(previous_time_scale);
 		hit_stop_end_msec = 0;
 	}
+}
+
+void PlayerController::dispatch_gameplay_input() {
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
 	}
@@ -957,23 +909,19 @@ void PlayerController::_process(double p_delta) {
 		return;
 	}
 
-	// 1. Walkman Tape Switch Trigger (T key)
-	bool is_t_pressed = input->is_key_pressed(Key::KEY_T);
-	if (is_t_pressed && !tape_key_was_pressed) {
+	InputMap *input_map = InputMap::get_singleton();
+	bool tape_pressed = input->is_action_just_pressed("switch_tape");
+	bool raw_t = input->is_key_pressed(Key::KEY_T);
+	if (tape_pressed || (raw_t && !tape_key_was_pressed)) {
 		switch_tape();
 	}
-	tape_key_was_pressed = is_t_pressed;
-
-	// 2. Equipment Toggle: Roller Skates (fallback if equip_skates action not defined)
-	InputMap *input_map = InputMap::get_singleton();
-	bool has_equip_skates = input_map && input_map->has_action("equip_skates");
-	if (!has_equip_skates) {
-		bool is_k_pressed = input->is_key_pressed(Key::KEY_K);
-		if (is_k_pressed && !skates_key_was_pressed) {
-			set_is_skating(!is_skating);
-		}
-		skates_key_was_pressed = is_k_pressed;
+	tape_key_was_pressed = raw_t;
+	bool skate_pressed = input->is_action_just_pressed("toggle_skates") || input->is_action_just_pressed("equip_skates");
+	bool raw_k = input->is_key_pressed(Key::KEY_K);
+	if (skate_pressed || (raw_k && !skates_key_was_pressed)) {
+		set_is_skating(!is_skating);
 	}
+	skates_key_was_pressed = raw_k;
 
 	// Attacks are disabled when movement is locked (e.g. in dialogue)
 	if (is_movement_locked) {
@@ -1032,6 +980,24 @@ void PlayerController::_process(double p_delta) {
 			if (is_sec_just_pressed) {
 				fire_secondary();
 			}
+		}
+	}
+
+	// Evade / Power-Slide Trigger
+	bool evade_pressed = input->is_action_just_pressed("evade");
+	if (!evade_pressed && input_map && input_map->has_action("dodge")) {
+		evade_pressed = input->is_action_just_pressed("dodge");
+	}
+	if (!evade_pressed && (input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V))) {
+		if (!evade_key_was_pressed) {
+		evade_pressed = true;
+		}
+	}
+	evade_key_was_pressed = input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V);
+
+	if (evade_pressed && current_state != STATE_EVADING && current_state != STATE_GRINDING && !is_movement_locked) {
+		if (try_evade()) {
+		return;
 		}
 	}
 
@@ -1195,7 +1161,7 @@ void PlayerController::attack() {
 		return;
 	}
 	orient_towards_cursor();
-	current_state = STATE_ATTACKING;
+	set_state(STATE_ATTACKING);
 	start_combo_hit(1);
 }
 
@@ -1555,7 +1521,8 @@ bool PlayerController::get_movement_locked() const {
 
 void PlayerController::set_movement_locked(bool p_locked) {
 	is_movement_locked = p_locked;
-	if (is_movement_locked) {
+	if (is_movement_locked && current_state != STATE_DEAD) {
+		set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
 		set_velocity(Vector3(0.0f, 0.0f, 0.0f));
 	}
 }
@@ -1565,39 +1532,10 @@ bool PlayerController::get_is_attacking() const {
 }
 
 void PlayerController::set_is_attacking(bool p_attacking) {
-	is_attacking = p_attacking;
-	if (is_attacking) {
-		current_state = STATE_ATTACKING;
-		if (attack_timer <= 0.0f) {
-			float duration = 2.3f / 2.0f;
-			if (anim_player) {
-				anim_player->set_speed_scale(2.4f);
-				double anim_len = anim_player->get_current_animation_length();
-				if (anim_len > 0.05) {
-					duration = static_cast<float>(anim_len / 2.0);
-				}
-			}
-			attack_timer = duration;
-		}
-	} else {
-		attack_timer = 0.0f;
-		current_state = STATE_NORMAL;
-		if (!anim_player) {
-			anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer2", true, false));
-			}
-		}
-		if (anim_player) {
-			float exit_speed = 1.0f;
-			anim_player->set_speed_scale(exit_speed);
-			if (get_velocity().length() > 0.0001f) {
-				String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
-				anim_player->play(anim_to_play);
-			} else {
-				anim_player->play("restpose");
-			}
-		}
+	if (p_attacking) {
+		attack();
+	} else if (current_state == STATE_ATTACKING) {
+		set_state(is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE);
 	}
 }
 
@@ -1904,7 +1842,7 @@ void PlayerController::die() {
 		return;
 	}
 
-	current_state = STATE_DEAD;
+	set_state(STATE_DEAD);
 	current_health = 0.0f;
 	death_timer = 2.5f;
 	is_invincible = true;
@@ -2092,7 +2030,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 	grind_entry_position = player_pos;
 
 	current_grind_path = p_path;
-	current_state = STATE_GRINDING;
+	set_state(STATE_GRINDING);
 
 	// Align visuals facing along rail upon entry
 	Vector3 face_dir = world_tangent * (grind_direction >= 0.0f ? 1.0f : -1.0f);
@@ -2149,14 +2087,11 @@ void PlayerController::dismount_grind(const Vector3 &p_exit_velocity) {
 		exit_vel.y = 2.5f;
 	}
 
-	current_state = STATE_AIRBORNE;
-	current_grind_path = nullptr;
-	grind_path_follow = nullptr;
-	grind_progress = 0.0f;
-	grind_elapsed_time = 0.0f;
-	grind_cooldown = 0.5f;
-
+	if (current_state != STATE_GRINDING) {
+		return;
+	}
 	set_velocity(exit_vel);
+	set_state(STATE_AIRBORNE);
 
 	if (!anim_player) {
 		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
@@ -2178,7 +2113,6 @@ void PlayerController::dismount_grind(const Vector3 &p_exit_velocity) {
 	}
 
 	UtilityFunctions::print("[Y2K-GRIND] <<< EXITED STATE_GRINDING! Restored exit momentum: ", exit_vel);
-	emit_signal("grind_ended", exit_vel);
 }
 
 void PlayerController::_on_grind_area_entered(Area3D *p_area) {
@@ -2204,7 +2138,47 @@ PlayerController::MovementState PlayerController::get_movement_state() const {
 }
 
 void PlayerController::set_movement_state(PlayerController::MovementState p_state) {
+	set_state(p_state);
+}
+
+void PlayerController::set_state(MovementState p_state) {
+	if (p_state < STATE_NORMAL || p_state > STATE_DEAD || p_state == current_state) {
+		return;
+	}
+	switch (current_state) {
+		case STATE_EVADING:
+			is_invincible = false;
+			evade_timer = 0;
+			evade_cooldown = evade_cooldown_max;
+			emit_signal("evade_ended");
+			break;
+		case STATE_ATTACKING:
+			is_attacking = false;
+			attack_timer = 0;
+			pending_hit_timer = -1;
+			lunge_timer = 0;
+			combo_buffered = false;
+			combo_hit = 0;
+			break;
+		case STATE_GRINDING:
+			current_grind_path = nullptr;
+			grind_path_follow = nullptr;
+			grind_progress = 0;
+			grind_elapsed_time = 0;
+			grind_cooldown = 0.5f;
+			emit_signal("grind_ended", get_velocity());
+			break;
+		default:
+			break;
+	}
 	current_state = p_state;
+	if (p_state == STATE_ATTACKING) {
+		is_attacking = true;
+	}
+	if (p_state == STATE_DEAD) {
+		pending_slam = false;
+		jump_buffer_timer = coyote_timer = 0;
+	}
 }
 
 bool PlayerController::is_grinding() const {
@@ -2246,10 +2220,6 @@ void PlayerController::set_attack_sensor(Area3D *p_sensor) {
 }
 
 void PlayerController::simulate_physics(double p_delta) {
-	if (!flame_particles || !visuals) {
-		_ready();
-	}
-	_process(p_delta);
 	_physics_process(p_delta);
 }
 
@@ -2284,7 +2254,10 @@ bool PlayerController::try_evade() {
 }
 
 void PlayerController::start_evade(const Vector3 &p_direction) {
-	current_state = STATE_EVADING;
+	if (is_movement_locked || current_state == STATE_DEAD || current_state == STATE_GRINDING || current_state == STATE_EVADING || evade_cooldown > 0) {
+		return;
+	}
+	set_state(STATE_EVADING);
 	evade_direction = p_direction.length_squared() > 0.001f ? p_direction.normalized() : facing_direction;
 	facing_direction = evade_direction;
 	evade_timer = evade_duration;

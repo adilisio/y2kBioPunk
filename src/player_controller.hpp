@@ -173,6 +173,8 @@ private:
 	void hit_stop(float p_duration);
 	void add_camera_trauma(float p_amount);
 	void step_physics(double p_delta);
+	void dispatch_gameplay_input();
+	void set_state(MovementState p_state);
 
 protected:
 	static void _bind_methods();

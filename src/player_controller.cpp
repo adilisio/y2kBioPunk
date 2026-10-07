@@ -619,34 +619,30 @@ void PlayerController::step_physics(double p_delta) {
 	// STATE_EVADING: Slide-Dodge Mechanic (Velocity Boost & I-Frames)
 	// =========================================================================
 	if (current_state == STATE_EVADING) {
-		evade_timer -= delta_f;
-		is_invincible = true;
-
-		// Velocity boost along evade direction
-		current_velocity.x = evade_direction.x * evade_speed;
-		current_velocity.z = evade_direction.z * evade_speed;
+		evade_timer = Math::max(0.0f, evade_timer - delta_f);
+		float elapsed = evade_duration - evade_timer;
+		is_invincible = elapsed < 0.18f;
+		float blend = Math::clamp((elapsed / evade_duration - 0.7f) / 0.3f, 0.0f, 1.0f);
+		blend = blend * blend * (3.0f - 2.0f * blend);
+		float speed = Math::lerp(evade_speed, get_movement_speed(), blend);
+		if (knockback_timer > 0) {
+			knockback_timer = Math::max(0.0f, knockback_timer - delta_f);
+		} else {
+			current_velocity.x = evade_direction.x * speed;
+			current_velocity.z = evade_direction.z * speed;
+		}
 		if (!is_on_floor()) {
 			current_velocity.y -= (current_velocity.y < 0 ? fall_gravity : gravity) * delta_f;
 		}
-
 		set_velocity(current_velocity);
 		move_and_slide();
-
-		if (evade_timer <= 0.0f) {
-			evade_timer = 0.0f;
+		rotate_visuals(evade_direction, p_delta);
+		if (evade_timer <= 0) {
 			is_invincible = false;
-			current_state = STATE_NORMAL;
+			current_state = is_on_floor() ? STATE_NORMAL : STATE_AIRBORNE;
 			evade_cooldown = evade_cooldown_max;
-
-			if (!anim_player) {
-				anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));
-			}
-			if (anim_player) {
-				anim_player->set_speed_scale(1.0f);
-				String anim_to_play = (is_skating || is_equipped_skates) ? "Running" : "Walking";
-				anim_player->play(anim_to_play);
-			}
 			emit_signal("evade_ended");
+			process_animation();
 		}
 		return;
 	}
@@ -2300,10 +2296,7 @@ void PlayerController::start_evade(const Vector3 &p_direction) {
 			visuals = Object::cast_to<Node3D>(find_child("Visuals", true, false));
 		}
 	}
-	if (visuals && visuals->is_inside_tree()) {
-		Vector3 target = visuals->get_global_position() + evade_direction;
-		visuals->look_at(target, Vector3(0.0f, 1.0f, 0.0f));
-	}
+	rotate_visuals(evade_direction, get_physics_process_delta_time());
 
 	if (!anim_player) {
 		anim_player = Object::cast_to<AnimationPlayer>(find_child("AnimationPlayer", true, false));

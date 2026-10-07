@@ -82,11 +82,11 @@ private:
 	float slam_radius = 4.5f;
 
 	// Evade / Power-Slide State
-	float evade_duration = 0.35f;
+	float evade_duration = 0.22f;
 	float evade_timer = 0.0f;
 	float evade_cooldown = 0.0f;
-	float evade_cooldown_max = 0.8f;
-	float evade_speed = 18.0f;
+	float evade_cooldown_max = 0.35f;
+	float evade_speed = 24.0f;
 	Vector3 evade_direction = Vector3(0.0f, 0.0f, 1.0f);
 	bool is_invincible = false;
 	bool evade_key_was_pressed = false;

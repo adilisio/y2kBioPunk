@@ -221,7 +221,7 @@ func _launch_mortar() -> void:
 			mortar.global_position = spawn_pos
 
 ## Public damage reception
-func take_damage(amount: int, _knockback_dir: Vector3 = Vector3.ZERO) -> void:
+func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		return
 
@@ -321,4 +321,15 @@ func _die() -> void:
 	if charge_tween and charge_tween.is_valid():
 		charge_tween.kill()
 	print("[CorruptedKioskTurret] %s collapsed! Bio-circuitry breached." % name)
-	queue_free()
+	
+	var tree = get_tree()
+	if tree:
+		var p = tree.get_first_node_in_group("player")
+		if not p and tree.current_scene:
+			p = tree.current_scene.find_child("Player", true, false)
+		if p and p.has_method("gain_xp"):
+			p.call("gain_xp", 40)
+
+	var t = create_tween()
+	t.tween_property(self, "scale", Vector3.ZERO, 0.15)
+	t.tween_callback(queue_free)

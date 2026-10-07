@@ -43,10 +43,10 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 
 | ID | Objective | Player problem solved | Owner / model / effort | Depends on | Diff | Risk | Status |
 |---|---|---|---|---|---|---|---|
-| WP-1 | Critical path: menu→mall, New/Continue, XP on kill, checkpoint respawn, boss gate + victory, cruft removal | Can't start, can't progress, can't retry, can't finish | Agy gemini-3.1-pro-high | — | M | Med (save semantics) | running (wt wp1) |
+| WP-1 | Critical path: menu→mall, New/Continue, XP on kill, checkpoint respawn, boss gate + victory, cruft removal | Can't start, can't progress, can't retry, can't finish | Agy gemini-3.1-pro-high | — | M | Med (save semantics) | **merged** |
 | WP-2 | Feel core: grounded model, anim blend/loop/speed-match, momentum + jump, melee timing + hit-stop + shake, hurt feedback, SFX format, grind entry/slam-on-land, evade tune, state-machine exits | Looks and feels broken moment to moment | Codex gpt-6.1-sol high | — | L | Med (hot file, feel tuning) | running (wt wp2) |
-| WP-5 | Honest test harness: exit codes, no crash at exit, isolated save path, one-command runner | Director can't trust any gate | Agy gemini-3.8-flash-high | — | S | Low | running (wt wp5) |
-| WP-3 | Presentation: WorldEnvironment glow/SSAO/fog/MSAA, color language (player green, enemies magenta/orange, interactables cyan, telegraphs red), emissive rails/kiosks, cutaway south/east walls, HUD legibility (no 0.7 scale, ≥20 px), adrenaline bar, pager messages for gate/level-up | Grey soup, unreadable enemies, tiny text | Agy gemini-3.1-pro-high | WP-1 merged | M | Low–Med | queued (brief drafted) |
+| WP-5 | Honest test harness: exit codes, no crash at exit, isolated save path, one-command runner | Director can't trust any gate | Agy gemini-3.8-flash-high | — | S | Low | **merged** |
+| WP-3 | Presentation: WorldEnvironment glow/SSAO/fog/MSAA, color language (player green, enemies magenta/orange, interactables cyan, telegraphs red), emissive rails/kiosks, cutaway south/east walls, HUD legibility (no 0.7 scale, ≥20 px), adrenaline bar, pager messages for gate/level-up | Grey soup, unreadable enemies, tiny text | Agy gemini-3.1-pro-high | WP-1 merged | M | Low–Med | running (wt wp3) |
 | WP-4 | Encounters: roach wind-up (0.35 s), cicada contact attack, mortar ballistic solve + landing marker, queen telegraph honest radius + detonation VFX/SFX, death pop + kill SFX, enemy SFX, spawn pacing | Enemies unfair or harmless; no combat beat | Codex gpt-6.1-sol medium | WP-1 + WP-2 merged | M | Med | queued (brief drafted) |
 | WP-6 | Onboarding + audio pass: pager tutorial lines (skates/evade/tape/secondary/grind) timed to first encounters; SFX for jump/land/grind/flame/disk/tape; music continues across tape switch | Nothing is taught; silence | Claude sonnet | WP-2 + WP-3 | S–M | Low | queued |
 | WP-7 | Integration playtest + balance (TTK/TTD table, XP curve to level 3–4 before boss, candy placement) | Difficulty curve | Fable + Gemini review | all above | S | Low | queued |
@@ -60,13 +60,16 @@ Target session length 15–30 min. Explicitly OUT: new enemies, weapons, biomes,
 | Fable | ledger, WP-3/WP-4 briefs, review on landing | main checkout | — |
 
 ## Ready for integration
-(none yet)
+(none)
 
-## Verified
-(none yet)
+## Verified (merged to main)
+- **WP-1 critical path** (Gemini 3.1 Pro) — merged 16:25 + Director fix-up. Verified by `tests/test_critical_path.gd` (19 checks, written by the Director against the real API) and harness screenshots `ops/runs/shots/wp1.*.png`: New Game → mall, level 1, full HP, no roach within 10 m of spawn, alive 12 s idle, exact XP on kill, boss spawns on arena entry, victory card + return to menu wired.
+- **WP-5 test harness** (Gemini 3.8 Flash) — merged 16:35 + Director runner fixes. `ops/tools/run_tests.ps1` now 11/11 PASS on main, no crash dialogs, exit codes honest.
+- **Director integration commit 234037c**: boss gate moved to z −19 (skating north for 2.5 s used to wake the Queen), runner launches Godot directly and never kills other agents' processes, three stale tests updated.
 
 ## Rejected / reworked
-- WP-2 attempt 1 (Codex, `-s workspace-write`): no changes made; sandbox blocked git. Relaunched. Not a quality rejection.
+- WP-2 attempt 1 (Codex, `-s workspace-write`): no changes made; sandbox blocked git. Relaunched with `danger-full-access` in its own worktree.
+- WP-1 report claimed `tests/test_critical_path.gd` passed; it called a nonexistent SaveManager API and hung. The report also claimed the victory flow was wired; it was not. Both fixed by the Director before merge. Lesson applied to all later dispatches: reports must paste actual test output.
 
 ## Next highest-leverage work
 1. Land WP-1 → smoke-test New Game → mall → survive → kill → XP → checkpoint → die → respawn → boss → victory with the harness.

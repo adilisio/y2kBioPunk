@@ -1,4 +1,5 @@
 extends SceneTree
+const TestUtil = preload("res://tests/_test_util.gd")
 
 ## WP-6 onboarding + audio verification (headless).
 ## Part A: tutorial director hint sequence/gates driven through the real player signals.

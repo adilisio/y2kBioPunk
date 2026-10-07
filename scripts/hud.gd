@@ -336,18 +336,10 @@ func _ready() -> void:
 			player.connect("health_changed", Callable(self, "_on_health_changed"))
 		if player.has_signal("stats_changed"):
 			player.connect("stats_changed", Callable(self, "_on_stats_changed"))
-		if player.has_signal("tape_switched"):
-			player.connect("tape_switched", Callable(self, "_on_tape_switched"))
-		if player.has_signal("skates_toggled"):
-			player.connect("skates_toggled", Callable(self, "_on_skates_toggled"))
 		if player.has_signal("xp_changed"):
 			player.connect("xp_changed", Callable(self, "_on_xp_changed"))
-		if player.has_signal("leveled_up"):
-			player.connect("leveled_up", Callable(self, "_on_leveled_up"))
 		if player.has_signal("stat_point_spent"):
 			player.connect("stat_point_spent", Callable(self, "_on_stat_point_spent"))
-		if player.has_signal("secondary_weapon_switched"):
-			player.connect("secondary_weapon_switched", Callable(self, "_on_secondary_weapon_switched"))
 		if player.has_signal("player_died"):
 			player.connect("player_died", Callable(self, "_on_player_died"))
 

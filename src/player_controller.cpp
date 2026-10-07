@@ -2,6 +2,7 @@
 #include "mutated_bug_enemy.hpp"
 
 #include <godot_cpp/classes/animation_player.hpp>
+#include <godot_cpp/classes/animation.hpp>
 #include <godot_cpp/classes/audio_stream.hpp>
 #include <godot_cpp/classes/audio_stream_player.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
@@ -28,6 +29,7 @@
 #include <godot_cpp/classes/callback_tweener.hpp>
 #include <godot_cpp/classes/property_tweener.hpp>
 #include <godot_cpp/classes/sphere_mesh.hpp>
+#include <godot_cpp/classes/skeleton3d.hpp>
 #include <godot_cpp/classes/standard_material3d.hpp>
 #include <godot_cpp/classes/tween.hpp>
 #include <godot_cpp/classes/viewport.hpp>
@@ -54,6 +56,10 @@ void PlayerController::_ready() {
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
 	}
+	if (ready_initialized) {
+		return;
+	}
+	ready_initialized = true;
 
 	set_motion_mode(MOTION_MODE_GROUNDED);
 	set_collision_layer(1 | 2);
@@ -62,6 +68,9 @@ void PlayerController::_ready() {
 	visuals = Object::cast_to<Node3D>(get_node_or_null("Visuals"));
 	if (!visuals) {
 		visuals = Object::cast_to<Node3D>(find_child("Visuals", true, false));
+	}
+	if (visuals) {
+		visuals_rest_position = visuals->get_position();
 	}
 
 	// Retrieve AnimationPlayer node safely
@@ -162,23 +171,7 @@ void PlayerController::_ready() {
 		walkman_audio->connect("finished", Callable(walkman_audio, "play"));
 	}
 
-	// Setup SFX audio player
-	sfx_audio = Object::cast_to<AudioStreamPlayer>(find_child("SFXAudio", false, false));
-	if (!sfx_audio) {
-		sfx_audio = memnew(AudioStreamPlayer);
-		sfx_audio->set_name("SFXAudio");
-		add_child(sfx_audio);
-	}
-
-	sfx_pool[0] = sfx_audio;
-	for (int i = 1; i < 4; ++i) {
-		sfx_pool[i] = memnew(AudioStreamPlayer);
-		sfx_pool[i]->set_name(String("SFXAudio") + String::num_int64(i));
-		add_child(sfx_pool[i]);
-	}
-	for (const char *name : { "hit", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land" }) {
-		sfx_cache[name] = create_sfx_stream(name);
-	}
+	setup_sfx();
 
 	// Setup Grindable Area3D Sensor for detecting grind rails
 	grind_sensor = Object::cast_to<Area3D>(find_child("GrindSensor", false, false));
@@ -694,7 +687,6 @@ void PlayerController::step_physics(double p_delta) {
 	// Check if input actions were just pressed
 	Input *input = Input::get_singleton();
 	if (input) {
-
 		if (jump_buffer_timer > 0 && coyote_timer > 0 && !is_attacking) {
 			current_velocity.y = jump_velocity;
 			play_sfx("jump");
@@ -704,8 +696,6 @@ void PlayerController::step_physics(double p_delta) {
 		if (input->is_action_just_released("jump") && current_velocity.y > 0) {
 			current_velocity.y *= 0.5f;
 		}
-
-
 	}
 
 	// Check for grind rail collisions
@@ -767,7 +757,12 @@ void PlayerController::step_physics(double p_delta) {
 		knockback_timer = Math::max(0.0f, knockback_timer - delta_f);
 	} else if (!is_on_floor()) {
 		if (has_input) {
-			hv = hv.move_toward(move_direction * speed, 20.0f * delta_f);
+			float h_speed = hv.length();
+			Vector3 direction = h_speed > 0.01f ? hv / h_speed : move_direction;
+			float angle = direction.signed_angle_to(move_direction, Vector3(0, 1, 0));
+			float turn = Math::deg_to_rad(180.0f) * delta_f;
+			direction = direction.rotated(Vector3(0, 1, 0), Math::clamp(angle, -turn, turn));
+			hv = hv.move_toward(direction * speed, 20.0f * delta_f);
 		}
 	} else if (!skating) {
 		bool braking = has_input && hv.length_squared() > 0.01f && hv.normalized().dot(move_direction) < -0.3f;
@@ -788,7 +783,9 @@ void PlayerController::step_physics(double p_delta) {
 	}
 	if (lunge_timer > 0.0f) {
 		lunge_timer -= delta_f;
-		hv = move_direction * speed + facing_direction * 4.0f;
+		if (knockback_timer <= 0) {
+			hv = move_direction * speed + facing_direction * 4.0f;
+		}
 	}
 	current_velocity.x = hv.x;
 	current_velocity.z = hv.z;
@@ -862,18 +859,38 @@ void PlayerController::process_animation() {
 	Vector3 hv = get_velocity();
 	hv.y = 0;
 	float speed = hv.length();
+	if (visuals) {
+		visuals->set_position(visuals_rest_position);
+	}
 	if (!is_on_floor() && !is_movement_locked) {
 		if (anim_player->has_animation("Running")) {
-			anim_player->play("Running");
-			anim_player->seek(0.18, true);
-			anim_player->pause();
+			if (anim_player->get_assigned_animation() != StringName("Running") || anim_player->is_playing() || Math::abs(anim_player->get_current_animation_position() - 0.18) > 0.001) {
+				// Paused clips cannot advance blend weights; sample the frozen pose without a blend.
+				anim_player->play("Running", 0.0);
+				anim_player->seek(0.18, true);
+				anim_player->pause();
+			}
 		}
 	} else if (speed < 0.1f || is_movement_locked) {
 		if (anim_player->has_animation("Punch_Combo_1")) {
-			anim_player->set_speed_scale(1.0f);
-			anim_player->play("Punch_Combo_1");
-			anim_player->seek(2.10, true);
-			anim_player->pause();
+			if (anim_player->get_assigned_animation() != StringName("Punch_Combo_1") || anim_player->is_playing() || Math::abs(anim_player->get_current_animation_position() - 2.10) > 0.001) {
+				anim_player->set_speed_scale(1.0f);
+				anim_player->play("Punch_Combo_1", 0.0);
+				anim_player->seek(2.10, true);
+				anim_player->pause();
+			}
+			// The authored guard clip raises both toes relative to the bind pose.
+			// Ground this frozen stance without altering the GLB scene transform.
+			Skeleton3D *skeleton = visuals ? Object::cast_to<Skeleton3D>(visuals->find_child("Skeleton3D", true, false)) : nullptr;
+			if (skeleton) {
+				int toe = skeleton->find_bone("mixamorig_LeftToe_End");
+				if (toe >= 0) {
+					Vector3 toe_pos = skeleton->get_global_transform().xform(skeleton->get_bone_global_pose(toe).origin);
+					Vector3 position = visuals_rest_position;
+					position.y -= Math::clamp(toe_pos.y - get_global_position().y - 0.05f, 0.0f, 0.3f);
+					visuals->set_position(position);
+				}
+			}
 		}
 	} else {
 		bool glide = (is_skating || is_equipped_skates) && speed >= 6.0f;
@@ -990,14 +1007,14 @@ void PlayerController::dispatch_gameplay_input() {
 	}
 	if (!evade_pressed && (input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V))) {
 		if (!evade_key_was_pressed) {
-		evade_pressed = true;
+			evade_pressed = true;
 		}
 	}
 	evade_key_was_pressed = input->is_key_pressed(Key::KEY_SHIFT) || input->is_key_pressed(Key::KEY_V);
 
 	if (evade_pressed && current_state != STATE_EVADING && current_state != STATE_GRINDING && !is_movement_locked) {
 		if (try_evade()) {
-		return;
+			return;
 		}
 	}
 
@@ -1820,8 +1837,32 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 	return wav;
 }
 
+void PlayerController::setup_sfx() {
+	if (sfx_pool[0]) {
+		return;
+	}
+	sfx_audio = Object::cast_to<AudioStreamPlayer>(find_child("SFXAudio", false, false));
+	if (!sfx_audio) {
+		sfx_audio = memnew(AudioStreamPlayer);
+		sfx_audio->set_name("SFXAudio");
+		add_child(sfx_audio);
+	}
+
+	sfx_pool[0] = sfx_audio;
+	for (int i = 1; i < 4; ++i) {
+		sfx_pool[i] = memnew(AudioStreamPlayer);
+		sfx_pool[i]->set_name(String("SFXAudio") + String::num_int64(i));
+		add_child(sfx_pool[i]);
+	}
+	for (const char *name : { "hit", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land" }) {
+		sfx_cache[name] = create_sfx_stream(name);
+	}
+
+}
+
 void PlayerController::play_sfx(const String &p_name) {
-	// Bare off-tree test instances have no audio voices until READY.
+	// Keep the existing off-tree play_sfx API usable by script callers.
+	setup_sfx();
 	AudioStreamPlayer *voice = sfx_pool[sfx_voice];
 	if (!voice) {
 		return;
@@ -2172,10 +2213,17 @@ void PlayerController::set_state(MovementState p_state) {
 			grind_cooldown = 0.5f;
 			emit_signal("grind_ended", get_velocity());
 			break;
+		case STATE_DEAD:
+			is_invincible = false;
+			death_timer = 0;
+			break;
 		default:
 			break;
 	}
 	current_state = p_state;
+	if (visuals) {
+		visuals->set_position(visuals_rest_position);
+	}
 	if (p_state == STATE_ATTACKING) {
 		is_attacking = true;
 	}
@@ -2291,7 +2339,7 @@ void PlayerController::start_evade(const Vector3 &p_direction) {
 		}
 	}
 
-	UtilityFunctions::print("[Y2K-MOVEMENT] >>> POWER-SLIDE EVADE! Boost: ", evade_speed, " m/s (Invincible for ", evade_duration, "s)");
+	UtilityFunctions::print("[Y2K-MOVEMENT] >>> POWER-SLIDE EVADE! Boost: ", evade_speed, " m/s (Invincible for ", 0.18f, "s)");
 	play_sfx("evade");
 	emit_signal("evade_started", evade_direction, evade_speed);
 }

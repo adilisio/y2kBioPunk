@@ -61,6 +61,7 @@ public:
 private:
 	// Traversal State Machine
 	MovementState current_state = STATE_NORMAL;
+	bool ready_initialized = false;
 	Path3D *current_grind_path = nullptr;
 	PathFollow3D *grind_path_follow = nullptr;
 	float grind_progress = 0.0f;
@@ -128,7 +129,6 @@ private:
 	float jump_velocity = 7.2f;
 
 	// Combat: Baseball Bat Melee Attack
-	float attack_cooldown = 0.8f;
 	float attack_timer = 0.0f;
 	float pending_hit_timer = -1.0f;
 	float lunge_timer = 0.0f;
@@ -161,6 +161,7 @@ private:
 
 	// Visuals & Animation
 	Node3D *visuals = nullptr;
+	Vector3 visuals_rest_position;
 	AnimationPlayer *anim_player = nullptr;
 	GPUParticles3D *flame_particles = nullptr;
 
@@ -174,6 +175,7 @@ private:
 	void add_camera_trauma(float p_amount);
 	void step_physics(double p_delta);
 	void dispatch_gameplay_input();
+	void setup_sfx();
 	void set_state(MovementState p_state);
 
 protected:

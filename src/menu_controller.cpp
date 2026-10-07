@@ -40,26 +40,36 @@ void MenuController::_ready() {
 	if (btn_exit && !btn_exit->is_connected("pressed", Callable(this, "on_exit_pressed"))) {
 		btn_exit->connect("pressed", Callable(this, "on_exit_pressed"));
 	}
+
+	Node *save_manager = get_node_or_null(NodePath("/root/SaveManager"));
+	if (btn_load && save_manager) {
+		bool has_save = save_manager->call("has_save_data");
+		btn_load->set_visible(has_save);
+	}
 }
 
 void MenuController::on_new_game_pressed() {
 	UtilityFunctions::print("[Y2K-MENU] 'NEW GAME' selected! Transitioning to main gameplay...");
+	Node *save_manager = get_node_or_null(NodePath("/root/SaveManager"));
+	if (save_manager) {
+		save_manager->call("clear_save");
+	}
 	SceneTree *tree = get_tree();
 	if (tree) {
-		String scene_path = target_game_scene;
-		if (!FileAccess::file_exists(scene_path)) {
-			if (FileAccess::file_exists("res://scenes/main.tscn")) {
-				scene_path = "res://scenes/main.tscn";
-			} else if (FileAccess::file_exists("res://main.tscn")) {
-				scene_path = "res://main.tscn";
-			}
-		}
-		tree->change_scene_to_file(scene_path);
+		tree->change_scene_to_file("res://scenes/FloodedMall_Greybox.tscn");
 	}
 }
 
 void MenuController::on_load_game_pressed() {
-	UtilityFunctions::print("[Y2K-MENU] 'LOAD GAME' selected! (Feature in development - save slots pending)");
+	UtilityFunctions::print("[Y2K-MENU] 'CONTINUE' selected! Loading save...");
+	Node *save_manager = get_node_or_null(NodePath("/root/SaveManager"));
+	if (save_manager) {
+		save_manager->set("pending_load", true);
+	}
+	SceneTree *tree = get_tree();
+	if (tree) {
+		tree->change_scene_to_file("res://scenes/FloodedMall_Greybox.tscn");
+	}
 }
 
 void MenuController::on_options_pressed() {

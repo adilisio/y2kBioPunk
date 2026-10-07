@@ -192,6 +192,6 @@ static func _generate_yum_sfx() -> AudioStreamWAV:
 			var env = exp(-t_chime * 4.5)
 			val += (sine + harm) * env * 0.55
 		val = clampf(val, -1.0, 1.0)
-		data[i] = int(clampf((val * 0.5 + 0.5) * 255.0, 0.0, 255.0))
+		data[i] = int(clampf(val, -1, 1) * 127.0) & 0xFF
 	wav.data = data
 	return wav

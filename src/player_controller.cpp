@@ -42,6 +42,8 @@
 
 using namespace godot;
 
+static Ref<AudioStreamWAV> create_sfx_stream(const String &type);
+
 PlayerController::PlayerController() {
 }
 
@@ -166,6 +168,16 @@ void PlayerController::_ready() {
 		sfx_audio = memnew(AudioStreamPlayer);
 		sfx_audio->set_name("SFXAudio");
 		add_child(sfx_audio);
+	}
+
+	sfx_pool[0] = sfx_audio;
+	for (int i = 1; i < 4; ++i) {
+		sfx_pool[i] = memnew(AudioStreamPlayer);
+		sfx_pool[i]->set_name(String("SFXAudio") + String::num_int64(i));
+		add_child(sfx_pool[i]);
+	}
+	for (const char *name : { "hit", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land" }) {
+		sfx_cache[name] = create_sfx_stream(name);
 	}
 
 	// Setup Grindable Area3D Sensor for detecting grind rails
@@ -689,6 +701,7 @@ void PlayerController::step_physics(double p_delta) {
 
 		if (jump_buffer_timer > 0 && coyote_timer > 0 && !is_attacking) {
 			current_velocity.y = jump_velocity;
+			play_sfx("jump");
 			jump_buffer_timer = coyote_timer = 0.0f;
 			current_state = STATE_AIRBORNE;
 		}
@@ -809,8 +822,12 @@ void PlayerController::step_physics(double p_delta) {
 	current_velocity.x = hv.x;
 	current_velocity.z = hv.z;
 
+	bool was_on_floor = is_on_floor();
 	set_velocity(current_velocity);
 	move_and_slide();
+	if (!was_on_floor && is_on_floor()) {
+		play_sfx("land");
+	}
 
 	// 4. Rotation: If attacking or firing secondary, cursor aiming overrides visual facing direction.
 	// Otherwise, if the movement vector is greater than zero, update the character's rotation
@@ -1769,7 +1786,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * 0.4f;
 			float val = Math::clamp((sine * 0.6f + noise) * env, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "evade") {
 		samples = static_cast<int>(22050 * 0.22f);
@@ -1781,7 +1798,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f);
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
 			float val = Math::clamp((sine * 0.3f + noise * 0.7f) * env * 0.7f, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "death") {
 		samples = static_cast<int>(22050 * 0.75f);
@@ -1793,7 +1810,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float square = (Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f)) > 0.0f) ? 0.5f : -0.5f;
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * (t * 0.5f);
 			float val = Math::clamp((square + noise) * env * 0.8f, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "slam") {
 		samples = static_cast<int>(22050 * 0.3f);
@@ -1805,7 +1822,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
 			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * 0.5f;
 			float val = Math::clamp((sine * 0.8f + noise * 0.2f) * env, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else if (type == "yum") {
 		// Juicy Gusher pop & sweet rising harmonic chime
@@ -1829,7 +1846,20 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 				val += (chime_sine + chime_harm) * chime_env * 0.55f;
 			}
 			val = Math::clamp(val, -1.0f, 1.0f);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "hurt" || type == "jump" || type == "land") {
+		float duration = type == "hurt" ? 0.15f : (type == "jump" ? 0.12f : 0.10f);
+		samples = static_cast<int>(22050 * duration);
+		data.resize(samples);
+		float phase = 0;
+		for (int i = 0; i < samples; ++i) {
+			float t = static_cast<float>(i) / samples;
+			float frequency = type == "hurt" ? Math::lerp(300.0f, 120.0f, t) : (type == "jump" ? Math::lerp(180.0f, 650.0f, t) : Math::lerp(110.0f, 45.0f, t));
+			phase += static_cast<float>(Math_TAU) * frequency / 22050.0f;
+			float wave = type == "hurt" ? (Math::sin(phase) > 0 ? 0.5f : -0.5f) : Math::sin(phase) * 0.6f;
+			float val = wave * (1.0f - t) * (1.0f - t);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	} else {
 		samples = static_cast<int>(22050 * 0.08f);
@@ -1838,7 +1868,7 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float t = static_cast<float>(i) / samples;
 			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * 500.0f / 22050.0f));
 			float val = sine * (1.0f - t);
-			data[i] = static_cast<uint8_t>(Math::clamp(static_cast<int>((val * 0.5f + 0.5f) * 255.0f), 0, 255));
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
 	}
 
@@ -1847,21 +1877,20 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 }
 
 void PlayerController::play_sfx(const String &p_name) {
-	if (!sfx_audio) {
-		sfx_audio = Object::cast_to<AudioStreamPlayer>(find_child("SFXAudio", true, false));
-		if (!sfx_audio) {
-			sfx_audio = memnew(AudioStreamPlayer);
-			sfx_audio->set_name("SFXAudio");
-			add_child(sfx_audio);
-		}
+	// Bare off-tree test instances have no audio voices until READY.
+	AudioStreamPlayer *voice = sfx_pool[sfx_voice];
+	if (!voice) {
+		return;
 	}
-	if (sfx_audio) {
-		Ref<AudioStreamWAV> stream = create_sfx_stream(p_name);
-		sfx_audio->set_stream(stream);
-		if (sfx_audio->is_inside_tree()) {
-			sfx_audio->play();
-		}
+	if (!sfx_cache.has(p_name)) {
+		sfx_cache[p_name] = create_sfx_stream(p_name);
 	}
+	Ref<AudioStream> stream = sfx_cache[p_name];
+	voice->set_stream(stream);
+	if (voice->is_inside_tree()) {
+		voice->play();
+	}
+	sfx_voice = (sfx_voice + 1) % 4;
 }
 
 bool PlayerController::is_dead() const {

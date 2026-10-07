@@ -152,6 +152,9 @@ private:
 	bool skates_key_was_pressed = false;
 	AudioStreamPlayer *walkman_audio = nullptr;
 	AudioStreamPlayer *sfx_audio = nullptr;
+	AudioStreamPlayer *sfx_pool[4] = { nullptr, nullptr, nullptr, nullptr };
+	int sfx_voice = 0;
+	Dictionary sfx_cache;
 
 	// Visuals & Animation
 	Node3D *visuals = nullptr;

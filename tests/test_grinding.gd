@@ -103,7 +103,7 @@ func run_tests() -> void:
 	player.simulate_physics(0.1)
 	
 	check(!player.is_grinding(), "Player must exit grinding state upon reaching the end of the curve")
-	check(player.get_movement_state() == 0, "State must return to STATE_NORMAL upon dismount")
+	check(player.get_movement_state() == 0 or player.get_movement_state() == 3, "State must return to NORMAL or AIRBORNE (dismount hop) upon dismount")
 	check(player.get_velocity().length() >= 10.0, "Exit momentum must be restored upon dismount")
 	check(player.get_velocity().y > 0.0, "Dismount hop velocity must be applied")
 	print(" -> PASS: Dismount mechanics and momentum restoration verified.")

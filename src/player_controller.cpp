@@ -3,6 +3,7 @@
 
 #include <godot_cpp/classes/animation_player.hpp>
 #include <godot_cpp/classes/animation.hpp>
+#include <godot_cpp/classes/audio_server.hpp>
 #include <godot_cpp/classes/audio_stream.hpp>
 #include <godot_cpp/classes/audio_stream_player.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
@@ -45,6 +46,28 @@
 using namespace godot;
 
 static Ref<AudioStreamWAV> create_sfx_stream(const String &type);
+
+// Music -8 dB / SFX 0 dB on separate buses. No default_bus_layout.tres exists, so create them at runtime.
+static void ensure_audio_buses() {
+	AudioServer *server = AudioServer::get_singleton();
+	if (!server) {
+		return;
+	}
+	if (server->get_bus_index("Music") < 0) {
+		server->add_bus();
+		int idx = server->get_bus_count() - 1;
+		server->set_bus_name(idx, "Music");
+		server->set_bus_send(idx, "Master");
+		server->set_bus_volume_db(idx, -8.0f);
+	}
+	if (server->get_bus_index("SFX") < 0) {
+		server->add_bus();
+		int idx = server->get_bus_count() - 1;
+		server->set_bus_name(idx, "SFX");
+		server->set_bus_send(idx, "Master");
+		server->set_bus_volume_db(idx, 0.0f);
+	}
+}
 
 PlayerController::PlayerController() {
 }
@@ -161,14 +184,26 @@ void PlayerController::_ready() {
 	}
 
 	// Setup Walkman audio player
+	ensure_audio_buses();
 	walkman_audio = Object::cast_to<AudioStreamPlayer>(find_child("WalkmanAudio", false, false));
 	if (!walkman_audio) {
 		walkman_audio = memnew(AudioStreamPlayer);
 		walkman_audio->set_name("WalkmanAudio");
 		add_child(walkman_audio);
 	}
+	walkman_audio->set_bus("Music");
 	if (!walkman_audio->is_connected("finished", Callable(walkman_audio, "play"))) {
 		walkman_audio->connect("finished", Callable(walkman_audio, "play"));
+	}
+	walkman_audio_b = Object::cast_to<AudioStreamPlayer>(find_child("WalkmanAudioB", false, false));
+	if (!walkman_audio_b) {
+		walkman_audio_b = memnew(AudioStreamPlayer);
+		walkman_audio_b->set_name("WalkmanAudioB");
+		add_child(walkman_audio_b);
+	}
+	walkman_audio_b->set_bus("Music");
+	if (!walkman_audio_b->is_connected("finished", Callable(walkman_audio_b, "play"))) {
+		walkman_audio_b->connect("finished", Callable(walkman_audio_b, "play"));
 	}
 
 	setup_sfx();
@@ -264,6 +299,7 @@ void PlayerController::gain_xp(int p_amount) {
 		}
 
 		UtilityFunctions::print("[Y2K-LEVEL] *** LEVEL UP! *** Now Level ", level, "! Gained 1 Stat Point. Unspent: ", unspent_stat_points, " | Next Level XP: ", xp_to_level);
+		play_sfx("levelup");
 		emit_signal("leveled_up", level, unspent_stat_points);
 	}
 
@@ -985,6 +1021,13 @@ void PlayerController::dispatch_gameplay_input() {
 	if (flame_particles) {
 		if (flame_particles->is_emitting() != should_emit_flame) {
 			flame_particles->set_emitting(should_emit_flame);
+			if (should_emit_flame) {
+				play_sfx("flame_loop");
+			} else {
+				if (sfx_loop_flame && sfx_loop_flame->is_playing()) {
+					sfx_loop_flame->stop();
+				}
+			}
 		}
 	}
 
@@ -1281,6 +1324,7 @@ void PlayerController::_exit_tree() {
 }
 
 void PlayerController::switch_tape(const String &p_tape_name) {
+	String old_tape = current_tape;
 	static const char *k_tapes[] = {
 		"Bubblegum",
 		"Bounce",
@@ -1376,8 +1420,21 @@ void PlayerController::switch_tape(const String &p_tape_name) {
 	emit_signal("tape_switched", current_tape, buff_desc);
 
 	// Walkman Audio Playback
-	if (walkman_audio) {
-		walkman_audio->stop();
+	if (walkman_audio && walkman_audio_b) {
+		float pos = 0.0f;
+		AudioStreamPlayer *fade_out = walkman_audio;
+		AudioStreamPlayer *fade_in = walkman_audio_b;
+		if (walkman_audio_b->is_playing() && walkman_audio_b->get_volume_db() > walkman_audio->get_volume_db()) {
+			fade_out = walkman_audio_b;
+			fade_in = walkman_audio;
+		}
+		
+		if (fade_out->is_playing()) {
+			tape_positions[old_tape] = fade_out->get_playback_position();
+		}
+		if (tape_positions.has(current_tape)) {
+			pos = static_cast<float>(tape_positions[current_tape]);
+		}
 
 		const char *candidates[8] = { nullptr };
 		if (current_tape == "Bubblegum" || current_tape == "Bubblegum Pop") {
@@ -1431,19 +1488,33 @@ void PlayerController::switch_tape(const String &p_tape_name) {
 		if (FileAccess::file_exists(chosen_path) || ResourceLoader::get_singleton()->exists(chosen_path)) {
 			Ref<AudioStream> stream = ResourceLoader::get_singleton()->load(chosen_path);
 			if (stream.is_valid()) {
-				walkman_audio->set_stream(stream);
-				if (walkman_audio->is_inside_tree()) {
-					walkman_audio->play();
+				fade_in->set_stream(stream);
+				if (fade_in->is_inside_tree()) {
+					fade_in->play(pos);
 				}
+				
+				if (walkman_tween.is_valid()) {
+					walkman_tween->kill();
+				}
+				walkman_tween = create_tween();
+				if (walkman_tween.is_valid()) {
+					fade_in->set_volume_db(-40.0f);
+					walkman_tween->tween_property(fade_in, "volume_db", 0.0f, 0.25f);
+					walkman_tween->parallel()->tween_property(fade_out, "volume_db", -40.0f, 0.25f);
+					walkman_tween->tween_callback(Callable(fade_out, "stop"));
+				}
+
 				UtilityFunctions::print("[Y2K-WALKMAN] *PLAY* Playing audio track: '", chosen_path, "' on WalkmanAudio.");
 			} else {
 				UtilityFunctions::print("[Y2K-WALKMAN] *ERROR* Failed to load audio stream from '", chosen_path, "'.");
 			}
 		} else {
-			walkman_audio->set_stream(Ref<AudioStream>());
+			fade_out->stop();
+			fade_in->set_stream(Ref<AudioStream>());
 			UtilityFunctions::print("[Y2K-WALKMAN] *INFO* Audio track '", chosen_path, "' not found in res://music/ (place .mp3 files here to play music).");
 		}
 	}
+	play_sfx("clack");
 }
 
 int PlayerController::get_effective_strength() const {
@@ -1822,6 +1893,98 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 			float val = wave * (1.0f - t) * (1.0f - t);
 			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
 		}
+	} else if (type == "grind_start") {
+		samples = static_cast<int>(22050 * 0.15f);
+		data.resize(samples);
+		for (int i = 0; i < samples; i++) {
+			float t = static_cast<float>(i) / samples;
+			float env = 1.0f - t;
+			float freq = 600.0f + t * 400.0f;
+			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
+			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * 0.5f;
+			float val = Math::clamp((sine * 0.5f + noise) * env, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "grind_loop") {
+		samples = static_cast<int>(22050 * 0.4f);
+		data.resize(samples);
+		wav->set_loop_mode(AudioStreamWAV::LOOP_FORWARD);
+		wav->set_loop_begin(0);
+		wav->set_loop_end(samples);
+		for (int i = 0; i < samples; i++) {
+			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f);
+			float freq = 400.0f;
+			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
+			float val = Math::clamp(noise * 0.3f + sine * 0.1f, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "flame_loop") {
+		samples = static_cast<int>(22050 * 0.4f);
+		data.resize(samples);
+		wav->set_loop_mode(AudioStreamWAV::LOOP_FORWARD);
+		wav->set_loop_begin(0);
+		wav->set_loop_end(samples);
+		for (int i = 0; i < samples; i++) {
+			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f);
+			float val = Math::clamp(noise * 0.4f, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "disk_fire") {
+		samples = static_cast<int>(22050 * 0.15f);
+		data.resize(samples);
+		for (int i = 0; i < samples; i++) {
+			float t = static_cast<float>(i) / samples;
+			float env = 1.0f - t;
+			float freq = 800.0f - t * 400.0f;
+			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
+			float val = Math::clamp(sine * env, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "disk_hit") {
+		samples = static_cast<int>(22050 * 0.15f);
+		data.resize(samples);
+		for (int i = 0; i < samples; i++) {
+			float t = static_cast<float>(i) / samples;
+			float env = 1.0f - t;
+			float freq = 600.0f;
+			float sine = (Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f)) > 0 ? 0.5f : -0.5f);
+			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f) * 0.5f;
+			float val = Math::clamp((sine + noise) * env, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "tape_clack" || type == "clack") {
+		samples = static_cast<int>(22050 * 0.06f);
+		data.resize(samples);
+		for (int i = 0; i < samples; i++) {
+			float t = static_cast<float>(i) / samples;
+			float env = 1.0f - t;
+			float noise = (static_cast<float>(rand() % 256) / 128.0f - 1.0f);
+			float click = (i < 20) ? 0.8f : 0.0f;
+			float val = Math::clamp((noise * 0.5f + click) * env, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "levelup") {
+		samples = static_cast<int>(22050 * 0.6f);
+		data.resize(samples);
+		for (int i = 0; i < samples; i++) {
+			float t = static_cast<float>(i) / samples;
+			float env = (t < 0.2f) ? 1.0f : ((t < 0.4f) ? 1.0f : 1.0f - (t - 0.4f) / 0.2f);
+			float freq = (t < 0.2f) ? 440.0f : ((t < 0.4f) ? 554.37f : 659.25f);
+			float sine = Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f));
+			float val = Math::clamp(sine * env * 0.6f, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
+	} else if (type == "page_beep") {
+		samples = static_cast<int>(22050 * 0.5f);
+		data.resize(samples);
+		for (int i = 0; i < samples; i++) {
+			float t = static_cast<float>(i) / samples;
+			float env = 1.0f - t;
+			float freq = 880.0f;
+			float square = (Math::sin(static_cast<float>(i) * (Math_TAU * freq / 22050.0f)) > 0 ? 0.5f : -0.5f);
+			float val = Math::clamp(square * env * 0.3f, -1.0f, 1.0f);
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(Math::clamp(static_cast<int>(val * 127.0f), -128, 127)));
+		}
 	} else {
 		samples = static_cast<int>(22050 * 0.08f);
 		data.resize(samples);
@@ -1845,6 +2008,7 @@ void PlayerController::setup_sfx() {
 	if (!sfx_audio) {
 		sfx_audio = memnew(AudioStreamPlayer);
 		sfx_audio->set_name("SFXAudio");
+		sfx_audio->set_bus("SFX");
 		add_child(sfx_audio);
 	}
 
@@ -1852,23 +2016,53 @@ void PlayerController::setup_sfx() {
 	for (int i = 1; i < 4; ++i) {
 		sfx_pool[i] = memnew(AudioStreamPlayer);
 		sfx_pool[i]->set_name(String("SFXAudio") + String::num_int64(i));
+		sfx_pool[i]->set_bus("SFX");
 		add_child(sfx_pool[i]);
 	}
-	for (const char *name : { "hit", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land" }) {
+
+	sfx_loop_grind = memnew(AudioStreamPlayer);
+	sfx_loop_grind->set_name("SFXGrindLoop");
+	sfx_loop_grind->set_bus("SFX");
+	add_child(sfx_loop_grind);
+
+	sfx_loop_flame = memnew(AudioStreamPlayer);
+	sfx_loop_flame->set_name("SFXFlameLoop");
+	sfx_loop_flame->set_bus("SFX");
+	add_child(sfx_loop_flame);
+
+	for (const char *name : { "hit", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land", "grind_start", "grind_loop", "flame_loop", "disk_fire", "disk_hit", "tape_clack", "clack", "levelup", "page_beep" }) {
 		sfx_cache[name] = create_sfx_stream(name);
 	}
-
 }
 
 void PlayerController::play_sfx(const String &p_name) {
-	// Keep the existing off-tree play_sfx API usable by script callers.
 	setup_sfx();
+	if (!sfx_cache.has(p_name)) {
+		sfx_cache[p_name] = create_sfx_stream(p_name);
+	}
+	emit_signal("sfx_played", p_name);
+
+	if (p_name == "grind_loop") {
+		if (sfx_loop_grind && sfx_loop_grind->is_inside_tree()) {
+			sfx_loop_grind->set_stream(sfx_cache[p_name]);
+			if (!sfx_loop_grind->is_playing()) {
+				sfx_loop_grind->play();
+			}
+		}
+		return;
+	} else if (p_name == "flame_loop") {
+		if (sfx_loop_flame && sfx_loop_flame->is_inside_tree()) {
+			sfx_loop_flame->set_stream(sfx_cache[p_name]);
+			if (!sfx_loop_flame->is_playing()) {
+				sfx_loop_flame->play();
+			}
+		}
+		return;
+	}
+
 	AudioStreamPlayer *voice = sfx_pool[sfx_voice];
 	if (!voice) {
 		return;
-	}
-	if (!sfx_cache.has(p_name)) {
-		sfx_cache[p_name] = create_sfx_stream(p_name);
 	}
 	Ref<AudioStream> stream = sfx_cache[p_name];
 	voice->set_stream(stream);
@@ -2117,6 +2311,8 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 	}
 
 	UtilityFunctions::print("[Y2K-GRIND] >>> ENTERED STATE_GRINDING on rail '", p_path->get_name(), "'! Speed: ", grind_speed, " m/s | Dir: ", grind_direction > 0 ? "Forward" : "Backward", " | Progress: ", closest_offset, "/", baked_len);
+	play_sfx("grind_start");
+	play_sfx("grind_loop");
 	emit_signal("grind_started", p_path, grind_speed);
 	return true;
 }
@@ -2211,6 +2407,9 @@ void PlayerController::set_state(MovementState p_state) {
 			grind_progress = 0;
 			grind_elapsed_time = 0;
 			grind_cooldown = 0.5f;
+			if (sfx_loop_grind && sfx_loop_grind->is_playing()) {
+				sfx_loop_grind->stop();
+			}
 			emit_signal("grind_ended", get_velocity());
 			break;
 		case STATE_DEAD:
@@ -2314,6 +2513,7 @@ void PlayerController::start_evade(const Vector3 &p_direction) {
 	facing_direction = evade_direction;
 	evade_timer = evade_duration;
 	is_invincible = true;
+	play_sfx("evade");
 
 	if (!visuals) {
 		visuals = Object::cast_to<Node3D>(get_node_or_null("Visuals"));
@@ -2641,6 +2841,7 @@ void PlayerController::fire_disk_launcher() {
 	Vector3 spawn_pos = my_pos + fire_dir * 1.0f + Vector3(0.0f, 0.8f, 0.0f);
 
 	UtilityFunctions::print("[Y2K-ARSENAL] *SHICK-ZWIP!* Fired Y2K Mini-Disc! DMG: ", disk_damage);
+	play_sfx("disk_fire");
 
 	Node *parent = get_parent();
 	if (parent && ResourceLoader::get_singleton()) {
@@ -2896,4 +3097,5 @@ void PlayerController::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("secondary_fired", PropertyInfo(Variant::INT, "weapon_type"), PropertyInfo(Variant::VECTOR3, "position"), PropertyInfo(Variant::VECTOR3, "direction"), PropertyInfo(Variant::FLOAT, "damage")));
 	ADD_SIGNAL(MethodInfo("secondary_weapon_switched", PropertyInfo(Variant::INT, "weapon_type"), PropertyInfo(Variant::STRING, "weapon_name")));
 	ADD_SIGNAL(MethodInfo("player_died"));
+	ADD_SIGNAL(MethodInfo("sfx_played", PropertyInfo(Variant::STRING, "name")));
 }

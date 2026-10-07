@@ -154,10 +154,15 @@ private:
 	bool tape_key_was_pressed = false;
 	bool skates_key_was_pressed = false;
 	AudioStreamPlayer *walkman_audio = nullptr;
+	AudioStreamPlayer *walkman_audio_b = nullptr;
+	Ref<Tween> walkman_tween;
+	Dictionary tape_positions;
 	AudioStreamPlayer *sfx_audio = nullptr;
 	AudioStreamPlayer *sfx_pool[4] = { nullptr, nullptr, nullptr, nullptr };
 	int sfx_voice = 0;
 	Dictionary sfx_cache;
+	AudioStreamPlayer *sfx_loop_grind = nullptr;
+	AudioStreamPlayer *sfx_loop_flame = nullptr;
 
 	// Visuals & Animation
 	Node3D *visuals = nullptr;

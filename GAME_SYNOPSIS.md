@@ -31,163 +31,33 @@ At midnight on December 31, 1999, automated bio-remediation protocols across mil
 
 ## 3. Current State of Development
 
-The game has evolved from early 2D prototypes into a fully playable **3D Isometric Action RPG** with a native C++ core, full enemy roster, boss, NPC dialogue, and a polished HUD. Here is an accurate accounting of what is **implemented and functional**:
+Status as of October 7, 2026, grounded in the Director ledger's **Verified (merged to main)** entries. Historical audit baselines describe earlier defects, not the current slice.
 
----
+### Playable Flow and Progression (WP-1)
 
-### A. C++ Player Controller & Locomotion (`src/player_controller.cpp / .hpp`)
+F5 runs the intro and menu; New Game clears stale saves and enters `scenes/FloodedMall_Greybox.tscn` with full health at level 1. Continue restores checkpoint progression. Enemies award XP exactly once on death. Bio-Stabilizers save stats, tape, XP, points and position; death reloads and restores the checkpoint with full health. The boss wakes on arena entry at z = -19 without requiring a mall clear. Defeat shows a victory card, records `slice_complete` and returns to the menu.
 
-The player is a `CharacterBody3D` driven entirely in C++ GDExtension with a **6-state locomotion state machine**:
+### Player Feel and Camera (WP-2 and Director Integration)
 
-| State | Enum Value | Description |
-|---|---|---|
-| `STATE_NORMAL` | 0 | Standard WASD movement & idle |
-| `STATE_ATTACKING` | 1 | Baseball bat melee swing lock window |
-| `STATE_GRINDING` | 2 | Spline rail traversal at 12–14 m/s |
-| `STATE_AIRBORNE` | 3 | Jump with preserved horizontal momentum |
-| `STATE_EVADING` | 4 | Power-slide dodge with iframes & velocity boost |
-| `STATE_DEAD` | 5 | No input, death VFX, 2.5s scene reload timer |
+The native six-state controller uses `set_state` for transitions and exit cleanup; attacks during evade are refused. Grounded animation poses, looping/blended locomotion and speed matching replace the floating frozen model. Walking accelerates and brakes; skating coasts and carves; air steering preserves momentum. Jumps support release cutting, coyote time and buffering. Buffered melee combos align damage with animation, add hit-stop and camera shake. Hurt feedback includes flash, sound, knockback and 0.6 s immunity. Rail entry checks movement/alignment and airborne/jump intent; manual dismount queues its slam until landing. The follow camera uses a 12 m arm and 45-degree FOV.
 
-**Locomotion Details:**
-- **Isometric 45° Camera-Relative Movement**: WASD inputs are transformed relative to the camera vector, Y-axis flattened for screen-relative navigation.
-- **Independent Visuals Rotation**: Root `CharacterBody3D` holds world position; the inner `Visuals` node smoothly slerps toward movement vectors via `look_at()`.
-- **Roller Skate Traversal**: Toggle with `[K]` — moves from 6.0 m/s walk to 12.0 m/s skate sprint. Animation speed scales accordingly.
-- **Jump** (`[SPACE]`): 6.0 m/s vertical impulse; horizontal air momentum preserved via lerp.
-- **Evade / Power-Slide** (`[SHIFT / V]`): 18.0 m/s burst with 0.35s duration, 0.8s cooldown, and temporary invincibility frames (`is_invincible = true`).
+The flamethrower and disk launcher are active secondary weapons. Walkman tapes alter effective STR, AGI, VIT and VIBE. Native synthesized SFX use signed PCM and cached rotating voices. The registered soldier and native bug enemy are unused by the active slice.
 
-**Grind Rail System (`STATE_GRINDING`):**
-- Snaps player onto `Path3D` curve rails at up to 14.0 m/s.
-- Uses `PathFollow3D` to trace curved rails; dynamically calculates forward tangent via `sample_baked()` and reorients `Visuals` via `look_at()`.
-- Generates adrenaline (+10/sec) while grinding.
-- **Dismount Slam**: Exiting a rail triggers `execute_grind_slam()` — a directional shockwave AoE (`Area3D` query, 4.5m radius, 35 base damage) visualized by an expanding cyan/yellow `CylinderMesh` Tween effect.
+### Presentation and Runtime Level (WP-3)
 
-**Death State (`STATE_DEAD`):**
-- Triggered by `die()` when `current_health ≤ 0`.
-- Stops all movement, disables all inputs (attack, evade, grind, secondary).
-- Triggers a crimson bio-hazard flatline `MeshInstance3D` pulse effect via Tween.
-- After 2.5 seconds, calls `get_tree()->reload_current_scene()`.
-- Emits `player_died` signal (caught by HUD to display "NEURAL LINK LOST" message).
+The runtime mall builder is the source of truth, replacing stale baked geometry. Environment glow, SSAO and fog, brighter lighting, emissive rails, contrasting enemy silhouettes and cutaway walls improve readability. The HUD uses native scale with health/XP/stat readouts, adrenaline, queued pager messages, Walkman display and a character sheet.
 
----
+### Encounters and Balance (WP-4 and Director Pass)
 
-### B. Secondary Weapon Arsenal (C++)
+The pre-boss roster contains nine enemies worth 170 experience points. Cicadas have telegraphed contact lunges (70 HP); roaches wind up before pouncing and have vulnerable recovery with pack limits (45 HP); kiosks launch ballistic mortars with landing markers (120 HP). Death guards prevent repeated rewards. The Queen has 1500 HP, three phases, minion summons and invulnerable transitions. Screech telegraphs match their damage radii: 7/9/11 m with charge durations 1.4/1.1/0.9 s.
 
-Bound to `[RMB / F]`, with weapon cycling on `[Q]`:
+### Verification (WP-5 and WP-7)
 
-| Weapon | Enum | Behavior |
-|---|---|---|
-| **Aerosol Flamethrower** | `SECONDARY_SPRAY_FLAMETHROWER` | Continuous damage tick while held; green/acid `GPUParticles3D` visual attached to `Visuals` node |
-| **Disk Launcher** | `SECONDARY_DISK_LAUNCHER` | Single-shot projectile (`disk_projectile.gd`) with cooldown |
+The headless runner checks exit codes, script errors and failed results, with bounded per-test timeouts and persistent logs. Lifecycle/cleanup fixes repaired previously crashing tests. The end-to-end test drives fresh start, exact kill XP, level/stat spending, checkpoint save, death/respawn restoration, real rail entry, landing slam, boss phases/summons, victory, menu and Continue visibility. The ledger records three consecutive end-to-end passes. Its latest balance entry records a passing suite; WP-7 documents retained dummy-renderer/resource diagnostics and the legacy save-test skip. These are scripted gates, not proof of warning-free execution or a human audio/visual playtest.
 
----
+### Landing Separately (WP-6)
 
-### C. Fast-Paced Melee Combat System (C++)
-
-- **Melee**: Baseball bat swing (`[LMB]`) at `speed_scale = 2.0f`; damage = `base_attack_damage (15) × STR multiplier`.
-- **Attack Sensor**: Dedicated `AttackSensor` (`Area3D`, radius = 2.2m) uses `get_overlapping_bodies()` / `get_overlapping_areas()` for strict spatial hit detection.
-- **XP on Kill**: Enemies award XP; `gain_xp()` handles level-up cascades, awarding 1 unspent stat point per level.
-
----
-
-### D. RPG Stat & Progression Engine (C++)
-
-- **Four Stats**: Strength (STR), Agility (AGI), Vitality (VIT), Vibe.
-- **Tape Buffs**: Active Walkman tape modifies **effective** stats on top of base stats. VIT × 10 = Max HP. AGI scales movement speed. STR scales melee damage. Vibe controls dialogue skill-checks.
-- **Level-Up**: XP threshold scales ×1.5 per level. Each level awards 1 stat point, spendable via the Character Sheet (`[C]`).
-- **Adrenaline Meter**: Separate resource that fills during rail grinding.
-- **Unspent Stat Points**: Begin with 1 unspent point at level 1.
-
----
-
-### E. Diegetic Walkman System (C++ & GDScript)
-
-- **8 Genre Tapes** implemented: *Bubblegum Pop, Nu-Metal, Eurodance, Big-Beat Rave, Skater Punk, Combat FIGHT, Hip-Hop Bounce, Pop-Rock Anthem*.
-- Tapes boost different stat combinations. Cycling with `[T]` rotates through the list.
-- `switch_tape()` emits a `tape_switched` signal with a buff description string caught by the HUD.
-
----
-
-### F. Enemy Roster (GDScript `CharacterBody3D` — all in `scripts/`)
-
-| Enemy | Script | HP | Behavior |
-|---|---|---|---|
-| **Neon Dial-Up Cicada** | `neon_cicada.gd` | 50 | 3D wander AI; emissive red flash + squash-and-stretch hit reaction; directional 7.5 m/s knockback |
-| **Sludge Roach** | `sludge_roach.gd` | 30 | 4-state machine: Idle → Tracking (flanking wave movement at 5.5 m/s) → Pouncing (leap + bite, 8.5 m/s) → Repositioning |
-| **Corrupted Kiosk Turret** | `corrupted_kiosk_turret.gd` | 120 | 5-state machine: Idle → Tracking (head pivot lerp) → Charging (squash pulse) → Firing (bio-sludge mortar arc) → Cooldown; self-builds CSG visuals at runtime |
-
-All enemies: award XP on death, flash red on hit, call `take_damage(amount, knockback_dir)`.
-
----
-
-### G. The Dial-Up Queen Boss (`scripts/dial_up_queen.gd`)
-
-- 600 HP, 3-phase boss with escalating speed, AoE radius, and summon count.
-- **Phase 1** (>66% HP): 2.5 m/s, 7m AoE radius, summons 2 minions.
-- **Phase 2** (33–66% HP): 4.0 m/s, 10m AoE radius, summons 3 minions. Transitions flash toxic-amber.
-- **Phase 3** (<33% HP): 5.5 m/s, 12m AoE radius, summons 4 minions. Enraged neon-magenta.
-- **AoE Attack**: "Modem Screech" bio-shockwave with telegraph ring visual expansion.
-- **Minion Summon**: Spawns `SludgeRoach` instances in a ring around the boss.
-- **Phase Transitions**: Temporary invulnerability window + player force-push repel.
-- Emits `boss_health_changed`, `boss_phase_transition`, `boss_defeated` signals.
-
----
-
-### H. Turret Mortar Projectile (`scripts/turret_mortar.gd`)
-
-- `Area3D` projectile with arcing physics (`vel + Vector3(0, 4.5, 0)` at 14 m/s), queued up by the Kiosk Turret.
-- `setup(spawn_pos, vel, damage, source)` initializes after `add_child()` to prevent null-position errors.
-
----
-
-### I. NPC & Dialogue System (`src/stranded_soldier_npc.cpp`)
-
-- **Stranded Soldier NPC** (`Area2D` in 3D scene): Proximity detection (E key), dialogue window trigger, movement lock/unlock.
-- **Vibe Check**: Compares player's `get_effective_vibe()` against a DC of 15. Pass/fail dialogue outcomes displayed in the HUD's `DialogueBox` modal.
-- Full dialogue UI: Speaker label, body text, two choice buttons (Standard / Vibe), Exit button.
-
----
-
-### J. Greybox Environment (`scenes/FloodedMall_Greybox.tscn` / `scripts/mall_greybox_builder.gd`)
-
-- **Procedural CSG Blockout** of a 50×50m flooded shopping mall atrium:
-  - Sunken basin with water plane (micro-offset +0.05m eliminates Z-fighting).
-  - Mezzanine terrace + 15° ramp.
-  - Colonnade slalom (pillars for skate navigation).
-  - Curved and straight `Path3D` grind rails elevated along mezzanine edges.
-- **Enemy Spawner**: Procedurally scatters Neon Cicadas, Sludge Roaches, and Corrupted Kiosk Turrets.
-- Builder is `@tool`-compatible — can rebuild the level from the editor Inspector.
-
----
-
-### K. CRT Pager HUD (`scripts/hud.gd` / scenes)
-
-- **Pager Box** (top-left, 0.7 scale): Real-time HP bar + color-coded BBCode RichTextLabel (green/yellow/red by HP %), XP bar, stat readout (STR/AGI/VIT/VIBE in color), equipment mode, color-coded control tips.
-- **Walkman Box** (bottom-right, 0.7 scale): Active tape name, buff description, animated equalizer bars, spinning cassette reel characters.
-- **Character Sheet** (modal, `[C]`): Full stat breakdown with `+1` buttons per stat; unspent point counter.
-- **Dialogue Modal**: Full NPC dialogue window with choice buttons and vibe-check pass/fail text.
-- **Death State**: On `player_died` signal → displays "⚠ CRITICAL BIO-FAILURE // FLATLINE" and "NEURAL LINK LOST. REBOOTING SYSTEM CLONE..."
-- HUD uses `MarginContainer + VBoxContainer` (separation 8px) with `RichTextLabel` (BBCode enabled, fit_content, scroll off) throughout.
-
----
-
-### L. Intro, Main Menu & Scenes
-
-- **Intro Screen** (`scenes/intro.tscn`): Video playback (`intro_video.ogv`) via C++ `IntroController`.
-- **Main Menu** (`scenes/main_menu.tscn`): C++ `MenuController` handles New Game / Quit.
-- **Main Scene** (`scenes/main.tscn`): Spawns Player with AI-generated Meshy character model and all systems active.
-- **Player Model**: Meshy AI-generated biopunk delinquent `.glb` with Walking, Running, and All_Animations sets.
-
----
-
-### M. Pickups & Consumables (`scenes/health_candy_pickup.tscn` / `scripts/health_candy_pickup.gd`)
-
-- **Fruit Candy Health Pickup (Gushers-Style Bio-Candy Pack)**:
-  - Small, standalone, zero-inventory pickup system.
-  - Floating, rotating Gusher-style candy jewel (ruby-magenta hexagonal outer shell + glowing neon electric-lime juice core + OmniLight3D glow).
-  - Walk into / touch trigger (`collision_layer = 0`, `collision_mask = 1 | 2`).
-  - Restores **10 HP**, strictly clamped to player `max_health` (e.g. 60/100 -> 70/100; 95/100 -> 100/100).
-  - Plays a juicy procedural 8-bit squish pop and rising chime "YUM!" sound effect.
-  - Single-use guarantee: disappears immediately upon pickup and queues free cleanly.
+Intended behavior: onboarding hints via the pager; music/SFX buses; tape resume. WP-6 is still in progress in the ledger; this document claims no verification of that packet.
 
 ---
 
@@ -202,7 +72,7 @@ All enemies: award XP on death, flash red on hit, call `take_damage(amount, knoc
 | **Secondary Weapons** | `SECONDARY_NONE(0)`, `SECONDARY_SPRAY_FLAMETHROWER(1)`, `SECONDARY_DISK_LAUNCHER(2)` |
 | **Combat Hitbox** | `AttackSensor` (`Area3D`, radius = 2.2m) with strict spatial overlap filtering |
 | **Display** | 1920×1080, Windowed Fullscreen (borderless), canvas stretch expand |
-| **Platform Target** | PC (Windows primary; Linux compatible) |
+| **Platform Target** | PC (Windows x86_64; no Linux manifest entry) |
 | **Compiled Binary** | `bin/libbiopunk.windows.template_debug.x86_64.dll` |
 | **Input Actions** | WASD (move), Space (jump), LMB (attack), RMB/F (secondary), Q (cycle secondary), K (toggle skates), T (cycle tape), Shift/V (evade), C (character sheet), E (interact) |
 
@@ -210,20 +80,11 @@ All enemies: award XP on death, flash red on hit, call `take_damage(amount, knoc
 
 ## 5. What's Still Missing / Next Steps
 
-### Phase 2: Polish & Core Feel
-- **Actual 3D Camera Rig**: Currently a fixed camera; implement a proper `SpringArm3D` isometric rig with a locked 45° angle and smooth follow.
-- **Audio**: No SFX for attacks, enemy hits, death, or evade. Walkman audio plays (slot exists) but tracks not wired. Needs sound design pass.
-- **Collision Layers**: Enemy/player collision layers need audit — enemies currently use broad detection rather than proper physics masks.
+Mirror of the Director ledger's outstanding work and deferred scope:
 
-### Phase 3: Content & World
-- **Tape Splice Mechanic**: Combine A-side and B-side tapes at workbench stations for hybrid stat profiles.
-- **Second Biome**: Transition from the Flooded Mall to the *Subterranean Cable Catacombs* or *Suburban Asphalt Strip*.
-- **Enemy Variety**: Additional archetypes beyond the current three (Cicada, Roach, Turret) — e.g., a melee brute or an aerial enemy.
+- Finish and verify WP-6 onboarding/audio after its first hint test failed in the initial attempt; land the packet and verify the integrated slice.
+- Human taste decisions remain open: walking speed versus the skate upgrade, perspective versus orthographic camera, and whether dormant NPC/dialogue belongs in the slice. The closer camera also increases pillar occlusion concerns.
+- Deferred beyond Vertical Slice 1: new enemies, weapons and biomes; NPC/dialogue content; tape splicing; controller support. These are outside the slice's definition of done.
+- Existing dummy-renderer/teardown diagnostics and the legacy save-test skip remain verification limits recorded by WP-7; passing test gates do not assert warning-free output.
 
-### Phase 4: Metagame
-- **Faction Quests & Vibe Checks**: Expand dialogue trees beyond the Stranded Soldier. More NPC types with passing/failing consequences.
-- **Save System**: No persistence yet; death reloads scene from scratch.
-
----
-
-*Document last updated: September 2026. Reflects all implemented C++ locomotion, 6-state player FSM, 3-enemy roster, Dial-Up Queen boss, Stranded Soldier NPC vibe-check dialogue, secondary weapon arsenal, grind slam attack, evade/power-slide, player death state, BBCode HUD, Walkman tape system, and procedural mall greybox.*
+*Updated October 7, 2026. Current behavior follows the ledger's verified entries; WP-6 behavior is explicitly intended and unverified here.*

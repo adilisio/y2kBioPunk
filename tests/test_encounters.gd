@@ -74,12 +74,12 @@ func _run() -> void:
 	cicada._process_windup(0.011)
 	for i in 18:
 		cicada._process_lunge(1.0 / 60.0)
-	check(player.damage_received == 10, "cicada lunge deals ten damage exactly once")
+	check(player.damage_received == 6, "cicada lunge deals six damage exactly once")
 	check(cicada.attack_cooldown >= 1.4, "cicada cooldown is at least 1.4s")
 	cicada.gravity = 0.0
 	for i in 84:
 		cicada._physics_process(1.0 / 60.0)
-	check(player.damage_received == 10, "cicada cannot deal a second hit during 1.4s cooldown")
+	check(player.damage_received == 6, "cicada cannot deal a second hit during 1.4s cooldown")
 	cicada.free()
 
 	var mortar := Mortar.new()

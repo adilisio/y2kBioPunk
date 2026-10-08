@@ -71,7 +71,7 @@ func _run() -> void:
 	target.damage_received = 0
 	cicada._process_lunge(0.01)
 	cicada._process_lunge(0.01)
-	TestUtil.check(target.damage_received == 10, "Cicada contact deals ten damage exactly once")
+	TestUtil.check(target.damage_received == 6, "Cicada contact deals six damage exactly once")
 	cicada.take_damage(1)
 	TestUtil.check(overlay(cicada.visual_mesh).emission.is_equal_approx(Color(1.0, 0.12, 0.12)), "Cicada hit flash stays red")
 	cicada.free()

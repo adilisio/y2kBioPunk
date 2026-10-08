@@ -287,7 +287,7 @@ func _process_lunge(delta: float) -> void:
 	if not lunge_hit and contact:
 		lunge_hit = true
 		if target_player.has_method("take_damage"):
-			target_player.call("take_damage", 10, lunge_direction)
+			target_player.call("take_damage", 6, lunge_direction)
 	if state_timer <= 0.0:
 		_enter_chasing()
 

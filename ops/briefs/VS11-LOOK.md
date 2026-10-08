@@ -38,3 +38,11 @@ On `vs11-look`, trailers `Agent: antigravity/gemini-3.1-pro` + `Co-Authored-By: 
 
 ## Report
 `ops/reports/VS11-LOOK.md`: what changed per item, pasted suite output, both `[FPS]` lines, shot list with one-line descriptions, anything skipped and why.
+
+## Critic addenda (from the independent Gemini visual critique, `ops/runs/critic/VISUAL-BASELINE.md`; Director-accepted items only)
+9. **Roach/cicada state tint destroys texture.** `EnemyModel.tint_material(color, alpha, energy)` is used with alpha ~0.55 for the roach pounce/vulnerable tint, which turns the model into a flat red blob. Lower the STATE tints (wind-up, vulnerable, cicada flare) to alpha ~0.3 with emission energy ~0.9 so the texture stays visible while the colour still reads from 12 m; keep the short HIT flash as it is. You may edit only the tint parameters in `scripts/sludge_roach.gd`, `scripts/neon_cicada.gd` and `scripts/corrupted_kiosk_turret.gd` for this.
+10. **Turret threat identity.** The turret blends with the kiosk props. Add a small emissive "screen" quad (thin CSG box on the model's front face) whose emission colour is driven by the existing `_set_screen_color` alongside the light, so the green/yellow/red ramp is on the body, not only in the light pool.
+11. **Water.** Give the basin `WaterFloor` material a mirror-ish look: metallic 0.6, roughness 0.15, a procedural `NoiseTexture2D` normal map (small, generated once, `as_normal_map = true`) with slow UV scroll via a tween or `_process` on the material's `uv1_offset` (one material, negligible cost). It must stay dark teal.
+12. **Floor vs wall value separation.** Walls darker and cooler than floors (walls ~0.10-0.13 albedo, floors ~0.22-0.26) so edges read without outlines.
+13. **Health bar styling.** Restyle the bottom health bar to match the pager: dark translucent panel, 2 px green border, inner fill with a subtle 2-px scanline pattern (StyleBoxTexture from a tiny generated texture, or two stacked StyleBoxFlat), and the HP text as it is. Do not move it.
+Rejected from the critique (do not do): volumetric fog (GPU cost on the target laptop), raising SSAO quality (measured cost), lowering the directional light further (player readability), CRT curvature.

@@ -589,9 +589,9 @@ func _on_xp_changed(cur_xp: int, req_xp: int, lvl: int) -> void:
 		level_xp_label.text = "[b]LEVEL[/b] [color=#ffdd44][b]%d[/b][/color]  |  [b]XP:[/b] [color=#66e0ff]%d[/color] / [color=#44aacc]%d[/color]  |  [b]STAT PTS:[/b] [color=#ffdd44][b]%d[/b][/color] ([color=#ffaa00][b][C][/b][/color] Stats)" % [lvl, cur_xp, req_xp, pts]
 	_refresh_character_sheet()
 
-func _on_leveled_up(new_lvl: int, unspent_pts: int) -> void:
+func _on_leveled_up(new_lvl: int, _unspent_pts: int) -> void:
 	if not victory_shown:
-		page_message("[color=#ffff00][b]LEVEL %d // +%d STAT PT [C][/b][/color]" % [new_lvl, unspent_pts])
+		page_message("[color=#ffff00][b]LEVEL %d // +1 STAT PT — press C to grow stronger[/b][/color]" % new_lvl)
 	_refresh_hud()
 	_refresh_character_sheet()
 
@@ -736,28 +736,36 @@ func _refresh_character_sheet() -> void:
 	if sheet_btn_vit: sheet_btn_vit.disabled = not can_spend
 	if sheet_btn_vibe: sheet_btn_vibe.disabled = not can_spend
 
-	var base_str = player.call("get_strength") if player.has_method("get_strength") else 10
 	var eff_str = player.call("get_effective_strength") if player.has_method("get_effective_strength") else 10
-	var bat_dmg = 15.0 + eff_str * 2.5
+	var strike_dmg = player.call("get_effective_bat_damage") if player.has_method("get_effective_bat_damage") else 15.0 + eff_str * 4.0
 	if sheet_str_label:
-		sheet_str_label.text = "STRENGTH: %d (Effective: %d | Bat DMG: %.1f)" % [base_str, eff_str, bat_dmg]
+		sheet_str_label.text = "STRENGTH %d → STRIKE DMG %.1f  (+4 per point)" % [eff_str, strike_dmg]
 
-	var base_agi = player.call("get_agility") if player.has_method("get_agility") else 10
 	var eff_agi = player.call("get_effective_agility") if player.has_method("get_effective_agility") else 10
-	var speed = player.call("get_movement_speed") if player.has_method("get_movement_speed") else 200.0
+	var speed = player.call("get_movement_speed") if player.has_method("get_movement_speed") else 8.7
+	var disk_dmg = player.call("get_disk_damage") if player.has_method("get_disk_damage") else 25.0 + eff_agi * 2.2
 	if sheet_agi_label:
-		sheet_agi_label.text = "AGILITY: %d (Effective: %d | Speed: %.0f)" % [base_agi, eff_agi, speed]
+		sheet_agi_label.text = "AGILITY %d → speed %.1f m/s · disk %.1f dmg  (+3%% speed per point)" % [eff_agi, speed, disk_dmg]
 
-	var base_vit = player.call("get_vitality") if player.has_method("get_vitality") else 10
 	var eff_vit = player.call("get_effective_vitality") if player.has_method("get_effective_vitality") else 10
 	var max_hp = player.call("get_max_health") if player.has_method("get_max_health") else 100.0
 	if sheet_vit_label:
-		sheet_vit_label.text = "VITALITY: %d (Effective: %d | Max HP: %.0f)" % [base_vit, eff_vit, max_hp]
+		sheet_vit_label.text = "VITALITY %d → max HP %.0f  (+12 HP per point)" % [eff_vit, max_hp]
 
-	var base_vibe = player.call("get_vibe") if player.has_method("get_vibe") else 10
 	var eff_vibe = player.call("get_effective_vibe") if player.has_method("get_effective_vibe") else 10
+	var crit = player.call("get_critical_chance") if player.has_method("get_critical_chance") else clampf(eff_vibe * 0.02, 0.0, 1.0)
 	if sheet_vibe_label:
-		sheet_vibe_label.text = "VIBE: %d (Effective: %d)" % [base_vibe, eff_vibe]
+		sheet_vibe_label.text = "VIBE %d → crit %.0f%% (×1.75 dmg)  (+2%% per point)" % [eff_vibe, crit * 100.0]
+
+	# Fit the explanatory rows without wrapping; keep the sheet centered at 1080p.
+	character_sheet.offset_left = -410.0
+	character_sheet.offset_right = 410.0
+	for label in [sheet_str_label, sheet_agi_label, sheet_vit_label, sheet_vibe_label]:
+		if label:
+			label.add_theme_font_size_override("font_size", 16)
+	var tip = character_sheet.get_node_or_null("Margin/VBox/TipLabel")
+	if tip:
+		tip.text = "Tapes shift these numbers while they play.\n[C] or [ESC] resume"
 
 # --- General HUD Refresh ---
 

@@ -5,6 +5,7 @@
 #include <godot_cpp/classes/audio_server.hpp>
 #include <godot_cpp/classes/audio_stream.hpp>
 #include <godot_cpp/classes/audio_stream_player.hpp>
+#include <godot_cpp/classes/bone_attachment3d.hpp>
 #include <godot_cpp/classes/camera3d.hpp>
 #include <godot_cpp/classes/character_body3d.hpp>
 #include <godot_cpp/classes/cylinder_mesh.hpp>
@@ -74,6 +75,65 @@ PlayerController::PlayerController() {
 PlayerController::~PlayerController() {
 }
 
+void PlayerController::attach_hand_bat() {
+	TypedArray<Node> skeletons = visuals->find_children("*", "Skeleton3D", true, false);
+	for (int s = 0; s < skeletons.size(); ++s) {
+		Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(skeletons[s]);
+		int hand = -1;
+		for (int i = 0; i < skeleton->get_bone_count(); ++i) {
+			String name = skeleton->get_bone_name(i);
+			UtilityFunctions::print_verbose("[Y2K-BAT] Bone ", i, ": ", name);
+			if (name == "mixamorig_RightHand" || name == "mixamorig:RightHand" || name == "RightHand" || name == "hand_R") {
+				hand = i;
+			}
+		}
+		if (hand < 0) {
+			continue;
+		}
+		BoneAttachment3D *attachment = memnew(BoneAttachment3D);
+		attachment->set_name("HandBatAttachment");
+		skeleton->add_child(attachment);
+		attachment->set_bone_name(skeleton->get_bone_name(hand));
+		attachment->set_bone_idx(hand);
+
+		Node3D *bat = memnew(Node3D);
+		bat->set_name("HeldBat");
+		attachment->add_child(bat);
+		// The hand's +Y runs wrist-to-fingers; -Z crosses the palm outward through the grip.
+		bat->set_position(Vector3(0.0f, 0.08f, 0.0f));
+		bat->set_rotation(Vector3(-static_cast<float>(Math_PI) * 0.5f, 0.0f, 0.0f));
+		auto add_cylinder = [bat](const char *name, float top, float bottom, float height, float y, const Color &color, bool emissive) {
+			Ref<StandardMaterial3D> material;
+			material.instantiate();
+			material->set_albedo(color);
+			material->set_roughness(0.7f);
+			if (emissive) {
+				material->set_feature(BaseMaterial3D::FEATURE_EMISSION, true);
+				material->set_emission(color);
+				material->set_emission_energy_multiplier(0.7f);
+			}
+			Ref<CylinderMesh> cylinder;
+			cylinder.instantiate();
+			cylinder->set_top_radius(top);
+			cylinder->set_bottom_radius(bottom);
+			cylinder->set_height(height);
+			cylinder->set_radial_segments(12);
+			cylinder->set_material(material);
+			MeshInstance3D *mesh = memnew(MeshInstance3D);
+			mesh->set_name(name);
+			mesh->set_mesh(cylinder);
+			mesh->set_position(Vector3(0.0f, y, 0.0f));
+			bat->add_child(mesh);
+		};
+		add_cylinder("WoodBarrel", 0.045f, 0.028f, 0.78f, 0.30f, Color(0.55f, 0.38f, 0.2f), false);
+		add_cylinder("DarkGrip", 0.03f, 0.03f, 0.14f, -0.01f, Color(0.08f, 0.07f, 0.06f), false);
+		add_cylinder("CyanTape", 0.031f, 0.031f, 0.022f, 0.07f, Color(0.1f, 0.8f, 0.85f), true);
+		UtilityFunctions::print_verbose("[Y2K-BAT] Attached bat to ", skeleton->get_bone_name(hand));
+		return;
+	}
+	UtilityFunctions::push_warning("[Y2K-BAT] STOP: player model has no usable right-hand bone; no bat attached.");
+}
+
 void PlayerController::_ready() {
 	if (Engine::get_singleton()->is_editor_hint()) {
 		return;
@@ -93,6 +153,7 @@ void PlayerController::_ready() {
 	}
 	if (visuals) {
 		visuals_rest_position = visuals->get_position();
+		attach_hand_bat();
 	}
 
 	// Retrieve AnimationPlayer node safely
@@ -271,7 +332,7 @@ void PlayerController::_ready() {
 }
 
 void PlayerController::recalculate_derived_stats() {
-	max_health = static_cast<float>(get_effective_vitality() * 10);
+	max_health = Math::max(1.0f, 100.0f + static_cast<float>(get_effective_vitality() - 10) * 12.0f);
 	if (current_health > max_health) {
 		current_health = max_health;
 	}
@@ -334,11 +395,12 @@ bool PlayerController::spend_stat_point(const String &p_stat_name) {
 }
 
 float PlayerController::get_movement_speed() const {
+	// Anchor the shipped Bubblegum (18 AGI) speeds; every point multiplies speed by 1.03.
+	float agility_scale = Math::pow(1.03f, static_cast<float>(get_effective_agility() - 18));
 	if (is_skating || is_equipped_skates) {
-		return skate_speed;
+		return skate_speed * agility_scale;
 	}
-	// Movement speed tied directly to agility stat (scaled for 3D meters/second: 5.0f - 8.0f m/s range)
-	return base_movement_speed + static_cast<float>(get_effective_agility()) * 0.15f;
+	return (base_movement_speed + 2.7f) * agility_scale;
 }
 
 Vector2 PlayerController::get_raw_input_direction() const {
@@ -1209,7 +1271,15 @@ bool PlayerController::orient_towards_cursor() {
 }
 
 float PlayerController::get_effective_bat_damage() const {
-	return base_attack_damage + static_cast<float>(get_effective_strength()) * 2.5f;
+	return base_attack_damage + static_cast<float>(get_effective_strength()) * 4.0f;
+}
+
+float PlayerController::get_critical_chance() const {
+	return Math::clamp(static_cast<float>(get_effective_vibe()) * 0.02f, 0.0f, 1.0f);
+}
+
+float PlayerController::get_disk_damage() const {
+	return 25.0f + static_cast<float>(get_effective_agility()) * 2.2f;
 }
 
 void PlayerController::attack() {
@@ -1246,6 +1316,10 @@ void PlayerController::execute_bat_attack() {
 	orient_towards_cursor();
 	float multiplier = combo_hit == 3 ? 1.5f : 1.0f;
 	float damage = get_effective_bat_damage() * multiplier;
+	bool critical = UtilityFunctions::randf() < get_critical_chance();
+	if (critical) {
+		damage *= 1.75f;
+	}
 	Array damaged_nodes;
 	if (attack_sensor && is_inside_tree()) {
 		// Area overlap caches lag a physics frame. Query the newly positioned shape directly.
@@ -1288,8 +1362,8 @@ void PlayerController::execute_bat_attack() {
 		}
 	}
 	if (!damaged_nodes.is_empty()) {
-		play_sfx("hit");
-		hit_stop(combo_hit == 3 ? 0.10f : 0.06f);
+		play_sfx(critical ? "crit_pop" : "hit");
+		hit_stop((combo_hit == 3 ? 0.10f : 0.06f) + (critical ? 0.04f : 0.0f));
 		add_camera_trauma(0.25f);
 	} else {
 		play_sfx("swing");
@@ -1392,29 +1466,29 @@ void PlayerController::switch_tape(const String &p_tape_name) {
 	// Print debug line showing the stat change
 	String buff_desc = "";
 	if (current_tape == "Bubblegum" || current_tape == "Bubblegum Pop") {
-		buff_desc = "Agility +8, Vibe +4 (Bubbly pop speed & cheerful attitude!)";
+		buff_desc = "Agility +8, Vibe +4 (More speed, disk damage & critical hits!)";
 	} else if (current_tape == "Bounce" || current_tape == "Bouncy Hip-Hop") {
-		buff_desc = "Strength +8 (Boom-bap rhythm & solid baseball bat power!)";
+		buff_desc = "Strength +8 (STRIKE DMG +32!)";
 	} else if (current_tape == "Metal" || current_tape == "Nu-Metal Rage") {
 		buff_desc = "Strength +5, Vitality +5 (Heavy distortion & armored bruiser grit!)";
 	} else if (current_tape == "Eurodance" || current_tape == "Eurodance Radio") {
-		buff_desc = "Agility +5, Vibe +10 (Hypnotic rave focus & radiant charisma!)";
+		buff_desc = "Agility +5, Vibe +10 (More speed, disk damage & +20% crit chance!)";
 	} else if (current_tape == "Skatr" || current_tape == "skater") {
 		buff_desc = "Agility +12, Strength +3 (Max skate velocity & fast punk adrenaline!)";
 	} else if (current_tape == "FIGHT" || current_tape == "combat") {
 		buff_desc = "Strength +10, Vitality +6 (Menacing combat riff & heavy bat impact!)";
 	} else if (current_tape == "Big-Beat" || current_tape == "bigbeat") {
-		buff_desc = "Vibe +12, Agility +6 (Chaotic rave breaks & high-voltage swagger!)";
+		buff_desc = "Vibe +12, Agility +6 (+24% crit chance, more speed & disk damage!)";
 	} else if (current_tape == "Anthem" || current_tape == "anthem") {
-		buff_desc = "Vitality +8, Vibe +8 (Stadium rock resilience & unshakeable team spirit!)";
+		buff_desc = "Vitality +8, Vibe +8 (+96 max HP & +16% crit chance!)";
 	}
 
 	float current_bat_dmg = get_effective_bat_damage();
 	UtilityFunctions::print("[Y2K-WALKMAN] *CLACK!* Inserted cassette: '", current_tape, "' | Buff: ", buff_desc,
-		" | STR: ", get_effective_strength(), " (Bat DMG: ", current_bat_dmg, ")",
+		" | STR: ", get_effective_strength(), " (STRIKE DMG: ", current_bat_dmg, ")",
 		" | AGI: ", get_effective_agility(), " (Speed: ", get_movement_speed(), ")",
 		" | VIT: ", get_effective_vitality(), " (Max HP: ", max_health, ")",
-		" | VIBE: ", get_effective_vibe());
+		" | VIBE: ", get_effective_vibe(), " (Crit: ", get_critical_chance() * 100.0f, "% x1.75)");
 
 	emit_signal("tape_switched", current_tape, buff_desc);
 
@@ -1807,7 +1881,18 @@ static Ref<AudioStreamWAV> create_sfx_stream(const String &type) {
 	int samples = 0;
 	PackedByteArray data;
 
-	if (type == "hit") {
+	if (type == "crit_pop") {
+		samples = static_cast<int>(22050 * 0.08f);
+		data.resize(samples);
+		float phase = 0.0f;
+		for (int i = 0; i < samples; ++i) {
+			float t = static_cast<float>(i) / samples;
+			phase += static_cast<float>(Math_TAU) * Math::lerp(1600.0f, 350.0f, t) / 22050.0f;
+			float env = (1.0f - t) * (1.0f - t);
+			float val = (Math::sin(phase) * 0.7f + Math::sin(phase * 2.0f) * 0.2f) * env;
+			data[i] = static_cast<uint8_t>(static_cast<int8_t>(val * 127.0f));
+		}
+	} else if (type == "hit") {
 		samples = static_cast<int>(22050 * 0.12f);
 		data.resize(samples);
 		for (int i = 0; i < samples; i++) {
@@ -2029,7 +2114,7 @@ void PlayerController::setup_sfx() {
 	sfx_loop_flame->set_bus("SFX");
 	add_child(sfx_loop_flame);
 
-	for (const char *name : { "hit", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land", "grind_start", "grind_loop", "flame_loop", "disk_fire", "disk_hit", "tape_clack", "clack", "levelup", "page_beep" }) {
+	for (const char *name : { "hit", "crit_pop", "swing", "evade", "death", "slam", "yum", "hurt", "jump", "land", "grind_start", "grind_loop", "flame_loop", "disk_fire", "disk_hit", "tape_clack", "clack", "levelup", "page_beep" }) {
 		sfx_cache[name] = create_sfx_stream(name);
 	}
 }
@@ -2824,7 +2909,7 @@ void PlayerController::fire_disk_launcher() {
 	}
 	secondary_cooldown = 0.8f;
 
-	float disk_damage = 25.0f + static_cast<float>(get_effective_agility()) * 2.2f;
+	float disk_damage = get_disk_damage();
 	Vector3 my_pos = is_inside_tree() ? get_global_position() : get_position();
 	Vector3 fire_dir = facing_direction;
 	Vector3 spawn_pos = my_pos + fire_dir * 1.0f + Vector3(0.0f, 0.8f, 0.0f);
@@ -2984,6 +3069,8 @@ void PlayerController::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("attack"), &PlayerController::attack);
 	ClassDB::bind_method(D_METHOD("get_effective_bat_damage"), &PlayerController::get_effective_bat_damage);
+	ClassDB::bind_method(D_METHOD("get_critical_chance"), &PlayerController::get_critical_chance);
+	ClassDB::bind_method(D_METHOD("get_disk_damage"), &PlayerController::get_disk_damage);
 	ClassDB::bind_method(D_METHOD("take_damage", "amount", "knockback"), &PlayerController::take_damage, DEFVAL(Vector3()));
 	ClassDB::bind_method(D_METHOD("heal", "amount"), &PlayerController::heal);
 

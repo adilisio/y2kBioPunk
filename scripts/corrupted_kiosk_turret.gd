@@ -39,6 +39,8 @@ var head_pivot: Node3D = null
 var barrel_mesh: CSGCylinder3D = null
 var screen_mesh: CSGBox3D = null
 var screen_mat: StandardMaterial3D = null
+var beacon: Node3D = null
+var visual_time := 0.0
 var hit_tween: Tween = null
 var flash_tween: Tween = null
 var charge_tween: Tween = null
@@ -138,6 +140,16 @@ func _physics_process(delta: float) -> void:
 			_process_cooldown(delta)
 
 	move_and_slide()
+
+func _process(delta: float) -> void:
+	if dying:
+		return
+	visual_time += delta
+	if beacon:
+		beacon.rotation.y += TAU * delta
+	if head_pivot and not is_instance_valid(target_player):
+		# Offset the sine so the head has also moved at the two-second sample.
+		head_pivot.rotation.y = deg_to_rad(35.0) * sin(visual_time * TAU / 4.0 + PI / 4.0)
 
 func _enter_idle() -> void:
 	current_state = State.IDLE
@@ -302,6 +314,7 @@ func _set_screen_color(col: Color) -> void:
 		if not screen_mat:
 			screen_mat = StandardMaterial3D.new()
 			screen_mat.emission_enabled = true
+			screen_mat.emission_energy_multiplier = 2.0
 			screen_mesh.material = screen_mat
 		screen_mat.albedo_color = col
 		screen_mat.emission = col
@@ -326,9 +339,66 @@ func _build_visuals() -> void:
 
 	screen_mesh = CSGBox3D.new()
 	screen_mesh.name = "CRTScreen"
-	screen_mesh.size = Vector3(0.6, 0.45, 0.1)
+	screen_mesh.size = Vector3(0.9, 0.675, 0.1)
 	screen_mesh.position = Vector3(0.0, 0.25, 0.6)
 	head_pivot.add_child(screen_mesh)
+
+	# A red rotating warning lamp stays hostile even when the CRT is idle green.
+	beacon = Node3D.new()
+	beacon.name = "Beacon"
+	beacon.position = Vector3(0.0, 0.65, 0.0)
+	head_pivot.add_child(beacon)
+	var beacon_mat := StandardMaterial3D.new()
+	beacon_mat.albedo_color = Color(1.0, 0.03, 0.02)
+	beacon_mat.emission_enabled = true
+	beacon_mat.emission = beacon_mat.albedo_color
+	beacon_mat.emission_energy_multiplier = 2.0
+	var lamp := CSGCylinder3D.new()
+	lamp.name = "BeaconLamp"
+	lamp.radius = 0.16
+	lamp.height = 0.25
+	lamp.sides = 12
+	lamp.material = beacon_mat
+	beacon.add_child(lamp)
+	var beacon_light := OmniLight3D.new()
+	beacon_light.name = "BeaconLight"
+	# An eccentric bulb makes the rotation visible with a cheap omni light.
+	beacon_light.position = Vector3(0.2, 0.05, 0.0)
+	beacon_light.light_color = beacon_mat.emission
+	beacon_light.omni_range = 4.0
+	beacon_light.light_energy = 1.2
+	beacon_light.shadow_enabled = false
+	beacon.add_child(beacon_light)
+
+	var hazard := CSGTorus3D.new()
+	hazard.name = "HazardRing"
+	hazard.inner_radius = 0.92
+	hazard.outer_radius = 1.1
+	hazard.sides = 24
+	hazard.ring_sides = 6
+	hazard.position.y = 0.06
+	hazard.scale.y = 0.3
+	var hazard_mat := StandardMaterial3D.new()
+	hazard_mat.albedo_color = Color(1.0, 0.75, 0.02)
+	hazard_mat.emission_enabled = true
+	hazard_mat.emission = hazard_mat.albedo_color
+	hazard_mat.emission_energy_multiplier = 0.6
+	hazard.material = hazard_mat
+	hazard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(hazard)
+	var black_ring := CSGTorus3D.new()
+	black_ring.name = "HazardRingBlack"
+	black_ring.inner_radius = 0.83
+	black_ring.outer_radius = 0.96
+	black_ring.sides = 24
+	black_ring.ring_sides = 6
+	black_ring.position.y = 0.07
+	black_ring.scale.y = 0.3
+	var black_mat := StandardMaterial3D.new()
+	black_mat.albedo_color = Color(0.015, 0.015, 0.015)
+	black_ring.material = black_mat
+	black_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(black_ring)
 
 	var model := EnemyModel.attach(head_pivot, model_path, model_height, -1.6, model_yaw)
 	if model:

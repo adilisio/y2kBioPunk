@@ -49,6 +49,11 @@ var flash_mat: StandardMaterial3D = null
 var hit_tween: Tween
 var flash_tween: Tween
 var detection_area: Area3D = null
+var flutter_time := 0.0
+var visual_rest_y := 0.0
+var visual_rest_scale_x := 1.0
+var motion_initialized := false
+var flutter_active := false
 
 const FX = preload("res://scripts/turret_mortar.gd")
 var dying := false
@@ -116,6 +121,27 @@ func _on_detection_body_exited(body: Node3D) -> void:
 	if body == target_player:
 		target_player = null
 		_enter_idle()
+
+func _process(delta: float) -> void:
+	if dying or not visual_mesh:
+		return
+	if not motion_initialized:
+		visual_rest_y = visual_mesh.position.y
+		visual_rest_scale_x = visual_mesh.scale.x
+		motion_initialized = true
+	flutter_time += delta
+	visual_mesh.position.y = visual_rest_y + 0.1 * sin(flutter_time * TAU / 2.4)
+	# Let attack/hurt squash own scale until finished, then resume the flutter.
+	if current_state == State.WINDUP or (hit_tween and hit_tween.is_running()):
+		flutter_active = false
+		return
+	var moving := not is_on_floor() or Vector2(velocity.x, velocity.z).length_squared() > 0.01
+	if moving:
+		visual_mesh.scale.x = visual_rest_scale_x * (1.04 + 0.04 * sin(flutter_time * TAU * 10.0))
+		flutter_active = true
+	elif flutter_active:
+		visual_mesh.scale.x = visual_rest_scale_x
+		flutter_active = false
 
 func _physics_process(delta: float) -> void:
 	if dying:

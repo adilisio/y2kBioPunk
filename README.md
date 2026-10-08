@@ -51,6 +51,17 @@ py -3 -m SCons platform=windows target=template_debug -j8
 
 SCons builds the bindings and `bin/libbiopunk.windows.template_debug.x86_64.dll`. Preserve SConstruct's `/MT` enforcement to match the bindings' static release runtime.
 
+## Release build
+
+Install the Godot 4.3 stable Windows export templates and place `Godot_v4.3-stable_win64.exe` at the repository root. With the C++ toolchain above available, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ops/tools/build_release.ps1
+powershell -ExecutionPolicy Bypass -File ops/tools/smoke_packaged.ps1
+```
+
+The build creates `build/Y2K-BioPunk-VS1.1-win64.zip` and a separate QA build. Extract the entire release archive and launch `Y2K-BioPunk.exe`; keep its PCK and DLL beside it. Smoke validation runs packaged tests headlessly and launches the release off-screen. Icon/version fields are retained in the presets, but executable resource modification is disabled to avoid requiring rcedit.
+
 ## Run the Tests
 
 ```powershell

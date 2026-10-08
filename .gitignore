@@ -54,7 +54,9 @@ test_output.txt
 .DS_Store
 Thumbs.db
 desktop.ini
-ops/runs/
+ops/runs/*
+!ops/runs/.gdignore
+build/
 .worktrees/
 
 # Secrets (API keys) and local env

@@ -57,6 +57,7 @@ var aoe_flashing := false
 var wing_flap_timer: float = 0.0
 
 const FX = preload("res://scripts/turret_mortar.gd")
+var summon_tint: StandardMaterial3D
 var dying := false
 var sfx: AudioStreamPlayer3D
 
@@ -207,7 +208,10 @@ func _face_player(delta: float) -> void:
 # =============================================================================
 
 func _charge_duration() -> float:
-	return [1.4, 1.1, 0.9][current_phase - 1]
+	return [1.4, 1.1, 1.05][current_phase - 1]
+
+func _pre_blast_duration() -> float:
+	return 0.3 if current_phase == 3 else 0.1
 
 func _aoe_radius() -> float:
 	return [7.0, 9.0, 11.0][current_phase - 1]
@@ -259,11 +263,11 @@ func _enter_aoe_attack() -> void:
 		mat.albedo_color = Color(1, 0.1, 0.05, 0.25)
 		mat.emission = Color.RED
 		aoe_tween = create_tween()
-		aoe_tween.tween_property(aoe_telegraph_ring, "radius", radius, state_timer - 0.1)
+		aoe_tween.tween_property(aoe_telegraph_ring, "radius", radius, state_timer - _pre_blast_duration())
 
 func _process_aoe(delta: float) -> void:
 	state_timer -= delta
-	if state_timer <= 0.1 and not aoe_flashing:
+	if state_timer <= _pre_blast_duration() and not aoe_flashing:
 		aoe_flashing = true
 		if aoe_telegraph_ring:
 			var mat := aoe_telegraph_ring.material as StandardMaterial3D
@@ -308,6 +312,11 @@ func _enter_minion_summon() -> void:
 
 	print_verbose("[DialUpQueen] >>> TRANSMITTING 56K HANDSHAKE... Summoning bio-minions!")
 
+	_play_sfx(1.5, 950.0, 0.55)
+	if queen_body:
+		summon_tint = EnemyModel.tint_material(Color(1.0, 0.75, 0.2), 0.35, 0.5)
+		EnemyModel.tint(queen_body, summon_tint)
+
 	# Antenna charge animation
 	if antenna_array:
 		var tween = create_tween()
@@ -316,8 +325,12 @@ func _enter_minion_summon() -> void:
 
 func _process_summon(delta: float) -> void:
 	state_timer -= delta
+	if summon_tint and queen_body:
+		summon_tint.albedo_color.a = 0.15 + 0.2 * (0.5 + 0.5 * sin((1.5 - state_timer) * TAU * 3.0))
+		EnemyModel.tint(queen_body, summon_tint)
 	if state_timer <= 0.0:
 		_execute_summon()
+		_reset_flash_visual()
 		_enter_idle()
 
 func _execute_summon() -> void:
@@ -331,6 +344,15 @@ func _execute_summon() -> void:
 		var angle = (TAU / count) * i + randf_range(-0.3, 0.3)
 		var spawn_offset = Vector3(cos(angle) * 3.5, 0.5, sin(angle) * 3.5)
 		var spawn_pos = global_position + spawn_offset
+		if is_instance_valid(target_player):
+			var away: Vector3 = spawn_pos - target_player.global_position
+			away.y = 0.0
+			if away.length() < 5.0:
+				if away.length_squared() < 0.001:
+					away = Vector3(cos(angle), 0.0, sin(angle))
+				var safe_pos: Vector3 = target_player.global_position + away.normalized() * 5.1
+				spawn_pos.x = safe_pos.x
+				spawn_pos.z = safe_pos.z
 
 		# Summon SludgeRoach or NeonCicada
 		var roach_script = load("res://scripts/sludge_roach.gd") if ResourceLoader.exists("res://scripts/sludge_roach.gd") else null
@@ -447,15 +469,16 @@ func _die() -> void:
 	current_state = State.DEFEATED
 	print("[DialUpQueen] *** BOSS DEFEATED! The dial-up carrier frequency has died. ***")
 	
-	if target_player and is_instance_valid(target_player) and target_player.has_method("gain_xp"):
-		target_player.call("gain_xp", 250)
-	
 	if get_tree():
 		for node in get_tree().get_nodes_in_group("enemies"):
-			if node.has_meta("summoned_by_boss") and node.get_meta("summoned_by_boss"):
-				node.queue_free()
-				
+			node.set_physics_process(false)
+			node.set_process(false)
+			node.queue_free()
+
+	# Start protection and pager suppression before awarding the Queen's XP.
 	emit_signal("boss_defeated")
+	if target_player and is_instance_valid(target_player) and target_player.has_method("gain_xp"):
+		target_player.call("gain_xp", 250)
 
 	# Dramatic shrink and explosion fade
 	if queen_body:

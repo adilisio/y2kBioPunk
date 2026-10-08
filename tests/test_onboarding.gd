@@ -63,23 +63,24 @@ func _run() -> void:
 		e.free()
 	player.global_position = Vector3(0, 0.1, 17)
 
+	TestUtil.check("STAT PTS:" in hud.level_xp_label.text and "[b]1[/b]" in hud.level_xp_label.text, "Starting HUD shows the one unspent stat point")
+
 	# --- Part A: hint sequence ---------------------------------------------------------------
 	await create_timer(1.5).timeout
-	TestUtil.check("MOVE" in _tip(), "First hint (MOVE/SWING) visible within 1.5 s; tip=%s" % _tip())
+	TestUtil.check("MOVE" in _tip(), "First hint (MOVE) visible within 1.5 s; tip=%s" % _tip())
 	TestUtil.check(played.has("page_beep"), "Hint plays the page_beep cue")
 
 	Input.action_press("move_forward")
-	player.emit_signal("attack_executed", 10.0)
 	await _frames(2)
 	Input.action_release("move_forward")
-	TestUtil.check("MOVE" not in _tip(), "MOVE hint dismissed by first move + swing; tip=%s" % _tip())
+	TestUtil.check("MOVE" not in _tip(), "MOVE hint dismissed by movement alone; tip=%s" % _tip())
 
 	var stub := _stub_enemy("StubBug", player.global_position + Vector3(20, 0, 0))
 	await _frames(2)
 	TestUtil.check("EVADE" not in _tip(), "Evade hint must not show for an enemy 20 m away")
 	stub.global_position = player.global_position + Vector3(5, 0, 0)
 	await _frames(2)
-	TestUtil.check("EVADE" in _tip(), "Evade hint shows with an enemy within 8 m; tip=%s" % _tip())
+	TestUtil.check("EVADE" in _tip(), "Evade hint shows with an enemy within 6 m; tip=%s" % _tip())
 	player.emit_signal("evade_started", Vector3.FORWARD, 10.0)
 	await _frames(2)
 	TestUtil.check("EVADE" not in _tip(), "Evade hint dismissed by evade_started; tip=%s" % _tip())
@@ -87,21 +88,43 @@ func _run() -> void:
 
 	player.current_health = float(player.max_health) * 0.5
 	await _frames(2)
-	TestUtil.check("TAPE" in _tip(), "Tape hint shows when HP < 60%%; tip=%s" % _tip())
+	TestUtil.check("TAPE" not in _tip(), "Low HP alone does not show the tape hint")
+	var old_elapsed: float = tutorial.elapsed
+	tutorial.elapsed = 25.0
+	TestUtil.check(tutorial._is_gate_open("tape"), "Tape hint fallback opens at 25 seconds")
+	tutorial.elapsed = old_elapsed
+	player.gain_xp(1)
+	await _frames(2)
+	TestUtil.check("TAPE" not in _tip(), "Tape hint waits through the first kill")
+	player.gain_xp(1)
+	await _frames(2)
+	TestUtil.check("each tape shifts STR/AGI/VIT/VIBE" in _tip(), "Truthful tape hint shows after the second kill; tip=%s" % _tip())
+
+	# Urgent evade interrupts a pending hint, which returns after the action.
+	tutorial.done.erase("evade")
+	tutorial.has_evaded = false
+	stub = _stub_enemy("StubBug", player.global_position + Vector3(5, 0, 0))
+	await _frames(2)
+	TestUtil.check("EVADE" in _tip() and "SWING: LMB" in _tip(), "Evade takes priority over pending tape hint and teaches swing")
+	player.emit_signal("evade_started", Vector3.FORWARD, 10.0)
+	await _frames(2)
+	TestUtil.check("TAPE" in _tip(), "Interrupted tape hint resumes after evading")
+	stub.free()
 
 	# --- Part B (tape resume) shares the tape hint dismissal: a real switch_tape ---------------
 	player.switch_tape("Bubblegum")
 	await _frames(2)
 	TestUtil.check("TAPE" not in _tip(), "Tape hint dismissed by tape switch; tip=%s" % _tip())
 
-	TestUtil.check("SKATES" not in _tip(), "Skates hint must wait for 2 kills or 25 s")
-	player.gain_xp(1)
-	player.gain_xp(1)
-	await _frames(2)
-	TestUtil.check("SKATES" in _tip(), "Skates hint shows after 2 kills; tip=%s" % _tip())
+	TestUtil.check("SKATES" in _tip() and "+38% speed" in _tip(), "Skates hint follows tape with truthful speed; tip=%s" % _tip())
 	player.set_is_skating(true)
 	await _frames(2)
 	TestUtil.check("SKATES" not in _tip(), "Skates hint dismissed by skates_toggled; tip=%s" % _tip())
+
+	TestUtil.check("SECONDARY: RMB or F fires; Q swaps flamethrower / disks" in _tip(), "Secondary hint follows skates")
+	player.fire_disk_launcher()
+	await _frames(2)
+	TestUtil.check("SECONDARY" not in _tip(), "Secondary hint dismissed by real firing signal")
 
 	var rail: Path3D = null
 	for area in get_nodes_in_group("grindable"):
@@ -116,7 +139,7 @@ func _run() -> void:
 		TestUtil.check("GRIND" not in _tip(), "Grind hint must not show 6+ m from the rail")
 		player.global_position = rail_pt + Vector3(0, 3.0, 0)
 		await _frames(2)
-		TestUtil.check("GRIND" in _tip(), "Grind hint shows when skating within 6 m of a rail; tip=%s" % _tip())
+		TestUtil.check("GRIND" in _tip() and "SPACE" in _tip(), "Grind hint names SPACE and shows when skating within 6 m of a rail; tip=%s" % _tip())
 		player.emit_signal("grind_started", rail, 10.0)
 		await _frames(2)
 		TestUtil.check("GRIND" not in _tip(), "Grind hint dismissed by grind_started; tip=%s" % _tip())
@@ -124,12 +147,12 @@ func _run() -> void:
 
 	_stub_enemy("CorruptedKioskTurret_Stub", player.global_position + Vector3(10, 0, 0))
 	await _frames(2)
-	TestUtil.check("TURRET" in _tip(), "Turret hint shows with a turret within 14 m; tip=%s" % _tip())
+	TestUtil.check("its light ramps green→yellow→RED" in _tip() and "red marker" in _tip(), "Truthful turret hint shows with a turret within 14 m; tip=%s" % _tip())
 	tutorial.active_age = tutorial.HINT_SECS
 	await _frames(3)
 	TestUtil.check(bool(hud.tutorial_finished), "Tutorial finishes after the last hint")
 	var legend := _tip()
-	TestUtil.check("WASD" in legend and "LMB" in legend and "SHIFT" in legend and "TURRET" not in legend, "Legend replaces hints when finished; tip=%s" % legend)
+	TestUtil.check("WASD" in legend and "LMB" in legend and "SHIFT" in legend and "SPACE" in legend and "RMB/F" in legend and "Q" in legend and "TURRET" not in legend, "Legend replaces hints when finished; tip=%s" % legend)
 
 	# --- Part B: audio -----------------------------------------------------------------------
 	var music_idx := AudioServer.get_bus_index("Music")

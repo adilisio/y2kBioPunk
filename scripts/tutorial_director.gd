@@ -12,14 +12,15 @@ extends Node
 const HINT_SECS := 8.0
 const FIRST_HINT_DELAY := 1.0
 const SKATES_FALLBACK_SECS := 25.0
-const HINT_ORDER := ["move", "evade", "tape", "skates", "grind", "turret"]
+const HINT_ORDER := ["move", "evade", "tape", "skates", "secondary", "grind", "turret"]
 const HINT_TEXT := {
-	"move": "MOVE: WASD   //   SWING: LMB",
-	"evade": "EVADE: SHIFT or V  (i-frames)",
-	"tape": "TAPE: T cycles mixtapes — VIT tapes heal-scale",
-	"skates": "SKATES: K  — 2x speed, rails become grindable",
-	"grind": "GRIND: skate ALONG the rail and JUMP onto it; JUMP again to slam off",
-	"turret": "TURRET: watch the screen — green→yellow→RED means a mortar is coming",
+	"move": "MOVE: WASD",
+	"evade": "EVADE: SHIFT or V  (i-frames) // SWING: LMB",
+	"tape": "TAPE: T cycles mixtapes — each tape shifts STR/AGI/VIT/VIBE",
+	"skates": "SKATES: K  — +38% speed, rails become grindable",
+	"secondary": "SECONDARY: RMB or F fires; Q swaps flamethrower / disks",
+	"grind": "GRIND: skate along the rail and press SPACE to hop on; SPACE again to slam off",
+	"turret": "TURRET: its light ramps green→yellow→RED, then a mortar drops on the red marker",
 }
 
 var hud: Node
@@ -38,6 +39,7 @@ var has_evaded: bool = false
 var has_taped: bool = false
 var has_skated: bool = false
 var has_grinded: bool = false
+var has_fired: bool = false
 
 var _last_xp: int = -1
 var _last_level: int = -1
@@ -59,6 +61,7 @@ func _ready() -> void:
 	_connect_signal("skates_toggled", "_on_skates")
 	_connect_signal("grind_started", "_on_grind")
 	_connect_signal("xp_changed", "_on_xp")
+	_connect_signal("secondary_fired", "_on_secondary")
 	_last_xp = int(player.get("current_xp")) if player.get("current_xp") != null else -1
 	_last_level = int(player.get("level")) if player.get("level") != null else -1
 
@@ -81,6 +84,9 @@ func _on_skates(_equipped: bool = true) -> void:
 
 func _on_grind(_rail: Node = null, _speed: float = 0.0) -> void:
 	has_grinded = true
+
+func _on_secondary(_weapon: int, _position: Vector3, _direction: Vector3, _damage: float) -> void:
+	has_fired = true
 
 func _on_xp(cur_xp: int, _next_xp: int, lvl: int) -> void:
 	# xp_changed also fires for non-kill reasons; only an XP/level increase counts as a kill.
@@ -132,13 +138,13 @@ func _is_gate_open(id: String) -> bool:
 		"move":
 			return elapsed >= FIRST_HINT_DELAY
 		"evade":
-			return _nearest_enemy_dist() <= 8.0
+			return _nearest_enemy_dist() <= 6.0
 		"tape":
-			var cur = player.get("current_health")
-			var mx = player.get("max_health")
-			return cur != null and mx != null and float(cur) < float(mx) * 0.6
+			return kills >= 2 or elapsed >= SKATES_FALLBACK_SECS
 		"skates":
 			return kills >= 2 or elapsed >= SKATES_FALLBACK_SECS
+		"secondary":
+			return done.has("skates")
 		"grind":
 			return bool(player.get("is_skating")) and _near_rail(6.0)
 		"turret":
@@ -148,13 +154,15 @@ func _is_gate_open(id: String) -> bool:
 func _is_dismissed(id: String) -> bool:
 	match id:
 		"move":
-			return has_moved and has_swung
+			return has_moved
 		"evade":
 			return has_evaded
 		"tape":
 			return has_taped
 		"skates":
 			return has_skated
+		"secondary":
+			return has_fired
 		"grind":
 			return has_grinded
 	return false # turret: timed only
@@ -164,6 +172,11 @@ func _process(delta: float) -> void:
 		return
 	elapsed += delta
 	_track_movement()
+
+	# A nearby threat interrupts the pending hint; that hint remains eligible afterward.
+	if elapsed >= FIRST_HINT_DELAY and not _boss_near() and active_id != "evade" and not done.has("evade") and not has_evaded and _is_gate_open("evade"):
+		_show("evade")
+		return
 
 	if active_id != "":
 		active_age += delta
@@ -183,7 +196,7 @@ func _process(delta: float) -> void:
 		_finish()
 		return
 
-	# The first hint is always MOVE at t+1 s; other gates (e.g. an enemy already near spawn) queue behind it.
+	# Hints begin at t+1 s; urgent EVADE can take priority over MOVE.
 	if elapsed < FIRST_HINT_DELAY:
 		return
 

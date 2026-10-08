@@ -169,6 +169,11 @@ func _on_boss_health_changed(cur_hp: int, max_hp: int, phase: int) -> void:
 		boss_hp_num_label.text = "%d / %d" % [max(0, cur_hp), max_hp]
 
 func _on_boss_defeated() -> void:
+	if victory_shown:
+		return
+	victory_shown = true
+	close_character_sheet()
+	clear_pager()
 	if boss_title_label:
 		boss_title_label.text = "[center][b][color=#39ff14]✔ DIAL-UP QUEEN DEFEATED // 56K CARRIER SIGNAL PURGED[/color][/b][/center]"
 	if boss_hp_bar:
@@ -187,7 +192,11 @@ func _on_boss_defeated() -> void:
 		sm.call("mark_slice_complete")
 	if player and player.has_method("set_movement_locked"):
 		player.call("set_movement_locked", true)
-	show_victory_card()
+	if player and player.has_method("set_is_invincible"):
+		player.set_is_invincible(true)
+	var card = create_tween()
+	card.tween_interval(1.2)
+	card.tween_callback(show_victory_card)
 	var back = create_tween()
 	back.tween_interval(6.0)
 	back.tween_callback(func():
@@ -581,7 +590,8 @@ func _on_xp_changed(cur_xp: int, req_xp: int, lvl: int) -> void:
 	_refresh_character_sheet()
 
 func _on_leveled_up(new_lvl: int, unspent_pts: int) -> void:
-	page_message("[color=#ffff00][b]LEVEL %d // +%d STAT PT [C][/b][/color]" % [new_lvl, unspent_pts])
+	if not victory_shown:
+		page_message("[color=#ffff00][b]LEVEL %d // +%d STAT PT [C][/b][/color]" % [new_lvl, unspent_pts])
 	_refresh_hud()
 	_refresh_character_sheet()
 
@@ -594,6 +604,7 @@ func show_victory_card() -> void:
 	close_character_sheet()
 	var lvl = player.call("get_level") if player and player.has_method("get_level") else 1
 	var vic = PanelContainer.new()
+	vic.name = "VictoryCard"
 	vic.set_anchors_preset(Control.PRESET_CENTER)
 	vic.anchor_left = 0.5
 	vic.anchor_top = 0.5
@@ -784,7 +795,7 @@ func _refresh_hud() -> void:
 		xp_bar.max_value = float(req_xp)
 		xp_bar.value = float(cur_xp)
 	if level_xp_label:
-		level_xp_label.text = "[b]LEVEL[/b] [color=#ffdd44][b]%d[/b][/color]  |  [b]XP:[/b] [color=#66e0ff]%d[/color] / [color=#44aacc]%d[/color]" % [lvl, cur_xp, req_xp]
+		level_xp_label.text = "[b]LEVEL[/b] [color=#ffdd44][b]%d[/b][/color]  |  [b]XP:[/b] [color=#66e0ff]%d[/color] / [color=#44aacc]%d[/color]  |  [b]STAT PTS:[/b] [color=#ffdd44][b]%d[/b][/color] ([color=#ffaa00][b][C][/b][/color] Stats)" % [lvl, cur_xp, req_xp, unspent]
 
 	var tape = player.get("current_tape")
 	var tape_str = str(tape) if tape != null else "Bubblegum"
@@ -837,7 +848,7 @@ func _update_control_tip() -> void:
 		else:
 			control_tip.text = ""
 	else:
-		control_tip.text = "[center]WASD · LMB · RMB/F · Q · K · T · SHIFT · C[/center]"
+		control_tip.text = "[center]WASD · SPACE · LMB · RMB/F · Q · K · T · SHIFT · C[/center]"
 
 # --- Message Pager System ---
 

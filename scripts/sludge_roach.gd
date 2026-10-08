@@ -135,6 +135,7 @@ func _physics_process(delta: float) -> void:
 func _enter_idle() -> void:
 	_release_slot()
 	current_state = State.IDLE
+	_reset_flash_visual()
 	velocity.x = 0.0
 	velocity.z = 0.0
 	state_timer = randf_range(0.3, 0.8)
@@ -150,6 +151,7 @@ func _process_idle(delta: float) -> void:
 
 func _enter_tracking() -> void:
 	current_state = State.TRACKING
+	_reset_flash_visual()
 	state_timer = randf_range(2.0, 4.0)
 
 func _process_tracking(delta: float) -> void:
@@ -211,7 +213,7 @@ func _enter_windup(dir: Vector3) -> void:
 	velocity.z = 0.0
 	_play_sfx(0.25, 1300.0, 0.85)
 	if visual_mesh:
-		_flash_hit_visual(true)
+		_flash_hit_visual(Color(1.0, 0.75, 0.2), true)
 		var cue := create_tween()
 		cue.tween_property(visual_mesh, "scale", rest_scale * Vector3(1.3, 0.5, 1.3), 0.1)
 	print_verbose("[SludgeRoach] wind-up (0.35s)")
@@ -243,7 +245,7 @@ func _process_pouncing(delta: float) -> void:
 		var offset := target_player.global_position - global_position
 		if Vector2(offset.x, offset.z).length() <= 1.4 and absf(offset.y) <= 2.0:
 			if target_player.has_method("take_damage"):
-				target_player.call("take_damage", bite_damage)
+				target_player.call("take_damage", bite_damage, pounce_direction.normalized())
 				print_verbose("[SludgeRoach] %s pounce bit player! Dealt %d damage" % [name, bite_damage])
 			_enter_repositioning()
 			return
@@ -255,6 +257,8 @@ func _enter_repositioning() -> void:
 	current_state = State.REPOSITIONING
 	state_timer = 1.2
 	_release_slot()
+	if flash_tween and flash_tween.is_valid():
+		flash_tween.kill()
 	_reset_flash_visual()
 	if visual_mesh:
 		var recover := create_tween()
@@ -291,11 +295,12 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		_die()
 
-func _flash_hit_visual(is_state: bool = false) -> void:
+func _flash_hit_visual(color: Color = Color(1.0, 0.2, 0.15), is_state: bool = false) -> void:
 	if visual_mesh and is_instance_valid(visual_mesh):
+		# State tints (amber wind-up) are lighter than the red hit flash so the texture stays readable.
 		var alpha = 0.3 if is_state else 0.55
 		var energy = 0.9 if is_state else 0.5
-		var flash_mat := EnemyModel.tint_material(Color(1.0, 0.2, 0.15), alpha, energy)
+		var flash_mat := EnemyModel.tint_material(color, alpha, energy)
 		EnemyModel.tint(visual_mesh, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():
@@ -306,7 +311,10 @@ func _flash_hit_visual(is_state: bool = false) -> void:
 
 func _reset_flash_visual() -> void:
 	if is_instance_valid(visual_mesh):
-		EnemyModel.untint(visual_mesh)
+		if current_state == State.REPOSITIONING:
+			EnemyModel.tint(visual_mesh, EnemyModel.tint_material(Color(0.5, 1.0, 1.0), 0.2, 0.5))
+		else:
+			EnemyModel.untint(visual_mesh)
 
 func _apply_squash_and_stretch() -> void:
 	if visual_mesh and is_instance_valid(visual_mesh):

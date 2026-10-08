@@ -79,7 +79,7 @@ private:
 	float max_adrenaline = 100.0f;
 
 	// Dismount & Grind Slam Attack
-	float base_slam_damage = 35.0f;
+	float base_slam_damage = 40.0f;
 	float slam_radius = 4.5f;
 
 	// Evade / Power-Slide State

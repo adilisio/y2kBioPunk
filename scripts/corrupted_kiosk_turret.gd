@@ -92,7 +92,7 @@ func _setup_detection_area() -> void:
 func _on_detection_body_entered(body: Node3D) -> void:
 	if body.is_in_group("player") or body.name == "Player" or body.is_class("PlayerController"):
 		target_player = body
-		if current_state == State.IDLE:
+		if current_state == State.IDLE and not get_tree().get_first_node_in_group("boss"):
 			_enter_tracking()
 
 func _on_detection_body_exited(body: Node3D) -> void:
@@ -111,6 +111,18 @@ func _physics_process(delta: float) -> void:
 
 	velocity.x = 0.0
 	velocity.z = 0.0
+
+	if get_tree().get_first_node_in_group("boss"):
+		if current_state != State.IDLE:
+			_enter_idle()
+			if charge_tween and charge_tween.is_valid():
+				charge_tween.kill()
+			if head_pivot:
+				head_pivot.scale = Vector3.ONE
+			if sfx:
+				sfx.stop()
+		move_and_slide()
+		return
 
 	# 2. State machine (driven cleanly by target_player signals)
 	match current_state:
@@ -204,6 +216,8 @@ func _process_cooldown(delta: float) -> void:
 			_enter_idle()
 
 func _launch_mortar() -> void:
+	if get_tree().get_first_node_in_group("boss"):
+		return
 	if not target_player or not is_instance_valid(target_player):
 		return
 

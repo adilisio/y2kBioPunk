@@ -234,7 +234,7 @@ func _enter_windup(dir: Vector3) -> void:
 	velocity.x = 0.0
 	velocity.z = 0.0
 	if visual_mesh:
-		_flash_hit_visual(true)
+		_flash_hit_visual(Color(1.0, 0.75, 0.2), true)
 		var cue := create_tween()
 		cue.tween_property(visual_mesh, "scale", Vector3(1.4, 0.8, 1.4), 0.25)
 		cue.tween_property(visual_mesh, "scale", Vector3.ONE, 0.25)
@@ -248,7 +248,7 @@ func _process_windup(delta: float) -> void:
 		attack_cooldown = 1.5
 		lunge_hit = false
 		_play_sfx(0.16, 1800.0, 0.2)
-		print_verbose("[NeonDialUpCicada] lunge (1.5m, 6 damage)")
+		print_verbose("[NeonDialUpCicada] lunge (1.5m, 10 damage)")
 
 func _process_lunge(delta: float) -> void:
 	state_timer -= delta
@@ -261,7 +261,7 @@ func _process_lunge(delta: float) -> void:
 	if not lunge_hit and contact:
 		lunge_hit = true
 		if target_player.has_method("take_damage"):
-			target_player.call("take_damage", 6, lunge_direction)
+			target_player.call("take_damage", 10, lunge_direction)
 	if state_timer <= 0.0:
 		_enter_chasing()
 
@@ -280,12 +280,13 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		_die()
 
-func _flash_hit_visual(is_state: bool = false) -> void:
+func _flash_hit_visual(color: Color = Color(1.0, 0.12, 0.12), is_state: bool = false) -> void:
 	if visual_mesh and is_instance_valid(visual_mesh):
 		# Translucent overlay keeps the model texture visible; low energy so ACES + glow does not blow it out to white.
+		# State tints (amber wind-up) are lighter than the red hit flash so the texture stays readable.
 		var alpha = 0.3 if is_state else 0.55
 		var energy = 0.9 if is_state else 0.45
-		flash_mat = EnemyModel.tint_material(Color(1.0, 0.12, 0.12), alpha, energy)
+		flash_mat = EnemyModel.tint_material(color, alpha, energy)
 		EnemyModel.tint(visual_mesh, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():

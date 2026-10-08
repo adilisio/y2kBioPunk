@@ -2822,7 +2822,7 @@ void PlayerController::fire_disk_launcher() {
 	if (secondary_cooldown > 0.0f) {
 		return;
 	}
-	secondary_cooldown = 0.45f;
+	secondary_cooldown = 0.8f;
 
 	float disk_damage = 25.0f + static_cast<float>(get_effective_agility()) * 2.2f;
 	Vector3 my_pos = is_inside_tree() ? get_global_position() : get_position();

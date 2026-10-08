@@ -61,7 +61,7 @@ VS1.1 added ~0.4 ms GPU over the VS1 baseline (7.3 ms). Lessons that still hold:
 
 ### Remaining issues (classified)
 - **Blocker:** none known.
-- **Post-VS1.1 polish:** the LATER list above; the packaged exe resolves `bin/*.dll` relative to its own folder (launch from the folder, as a double-click does; launching via a relative path from another cwd failed to load the extension); `BUILD-INFO.txt` reports "Working tree modified" when any untracked file exists; one ~27 ms frame at the first cicada lunge survives the warm-up on some runs; `test_slice_e2e` steps c/g flake when two checkouts run suites at once (shared `user://` save) and `test_presentation` crashed at exit once under that load.
+- **Post-VS1.1 polish:** the LATER list above; `test_encounters` "standing player survives 20 s" is marginal by design (two cicadas on an idle player) and may flake under heavy CPU load; the packaged exe resolves `bin/*.dll` relative to its own folder (launch from the folder, as a double-click does; launching via a relative path from another cwd failed to load the extension); `BUILD-INFO.txt` reports "Working tree modified" when any untracked file exists; one ~27 ms frame at the first cicada lunge survives the warm-up on some runs; `test_slice_e2e` steps c/g flake when two checkouts run suites at once (shared `user://` save) and `test_presentation` crashed at exit once under that load.
 - **Phase 2:** tape splicing, new enemies/weapons/biomes, controller support, NPC dialogue, save slots, kill persistence (owner rejected for the slice).
 - **Rejected:** see triage.
 
@@ -82,7 +82,17 @@ Additional ruling: **stats are not legible.** "Bat swing dmg" but the character 
 | Summon stall | Director | `EnemyModel.attach` now keeps loaded GLB `PackedScene`s in a static cache; the Queen summon no longer re-reads the 21 MB roach scene (560 ms → worst frame 12.5 ms in a 20 s phase-2 fight). Summon tone added to the warm-up; warm-up coroutine guarded against the scene being freed mid-run (intermittent menu-flow script error under load). |
 | VS11-IDENTITY | Codex high | Turret: rotating red beacon light, yellow hazard ring, 50 % larger screen on the state ramp, idle ±35° scan. Queen: figure-8 drift (2.5 m, ~7 s), bob 0.35 m, roll sway, rise on screech charge + squash on blast, spin on summon/phase change; all gameplay numbers unchanged (asserted in `test_identity`). Roach scuttle bob/wobble, cicada wing flutter. GPU +0.4 ms, draw calls +14. |
 | VS11-STATS | Codex high (quota ran out before its commit; Director verified and committed) | A wooden bat with grip and cyan tape on the `mixamorig:RightHand` bone, carried by every animation; "STRIKE DMG" wording; per-point effects STR +4 dmg, AGI +3 % speed (anchored at the shipped 8.7 / 12 m/s), VIT +12 HP; VIBE = crit chance 2 %/pt, ×1.75, +40 ms hit-stop and a pop; the sheet explains each stat with live numbers and per-point gains; summoned minions give 0 XP, Queen 120 XP → level 3 before the arena, level 4 after the Queen (was 5+). `test_stats`. |
-Tests: 25 suites (23 + `test_identity`, `test_stats`). Package rebuilt from this state; see the performance table below for the re-measure.
+| Gate repair | Director | The stat change broke two suites: `test_feel_combat` (random crits in the combo; now `critical_chance_override` makes tests deterministic and expectations derive from the formulas) and `test_encounters` (Queen XP 250→120). Cicada contact damage went back to 6: at 10 an idle player at spawn died within 20 s one run in three, violating VS1 criterion 1. |
+Tests: 25 suites (23 + `test_identity`, `test_stats`), all PASS (`ops/runs/tests_final_gate3.txt`). Package rebuilt from the final state (`build_release_final4.log`, `smoke_final4.log`).
+
+Final re-measure (2026-10-08 15:50, GPU at 1670 MHz P0 throughout):
+| Spot | avg fps | 1 %-low | worst frame | render_gpu | draw calls |
+|---|---:|---:|---:|---:|---:|
+| Spawn, first cicadas | 122.9 | 90.5 | 12.6 ms | 7.46 ms | 380 |
+| Basin, roaches | 122.5 | 101.8 | 13.1 ms | 7.24 ms | 353 |
+| Arena, phase-2 Queen + summons, 14 s | 126.7 | 101.7 | 10.3 ms | 7.25 ms | 406 |
+The summon stall (560 ms) is gone; the identity/stats additions cost nothing measurable.
+
 
 ## VS1 history (2026-10-07, condensed)
 Experience and DoD: New Game → flooded mall → telegraphed cicadas/roaches/turrets → XP/levels/character sheet → Bio-Stabilizer → death/respawn with progression → skate/rail/slam → three-phase Dial-Up Queen → victory card → menu → Continue. Packets WP-1..8 (audits by Codex/Gemini/Opus; critical path, feel core, presentation, encounters, test harness, onboarding/audio, e2e + balance, docs) all merged; details in `ops/reports/WP-*.md`.

@@ -51,6 +51,8 @@ var boss_hp_num_label: Label = null
 var active_boss: Node = null
 
 var player: Node = null
+var pause_dim: ColorRect = null
+var victory_shown: bool = false
 var anim_time: float = 0.0
 var reel_frames = ["|", "/", "-", "\\"]
 var reel_step: int = 0
@@ -293,6 +295,8 @@ func _init_pager_nodes() -> void:
 
 func _ready() -> void:
 	add_to_group("hud")
+	# The HUD keeps running while the character sheet pauses the tree.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	_init_pager_nodes()
 	_build_boss_bar()
 	var existing_boss = get_tree().get_first_node_in_group("boss") if get_tree() else null
@@ -352,9 +356,39 @@ func _ready() -> void:
 
 	_setup_window_mode()
 	_setup_ui_layout()
+	_build_pause_dim()
+	_keep_walkman_playing()
 
 	_refresh_hud()
 	_refresh_character_sheet()
+
+func _exit_tree() -> void:
+	# Safety net: never leave the tree paused when the HUD leaves it (scene change, quit to menu).
+	var tree := get_tree()
+	if tree and tree.paused:
+		tree.paused = false
+
+func _build_pause_dim() -> void:
+	var overlay = get_node_or_null("HUDOverlay")
+	if not overlay or not character_sheet or pause_dim:
+		return
+	pause_dim = ColorRect.new()
+	pause_dim.name = "PauseDim"
+	pause_dim.color = Color(0.0, 0.0, 0.0, 0.55)
+	pause_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	pause_dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_dim.visible = false
+	overlay.add_child(pause_dim)
+	overlay.move_child(pause_dim, character_sheet.get_index())
+
+func _keep_walkman_playing() -> void:
+	# Diegetic music keeps playing while the sheet is open; everything else freezes.
+	if not player:
+		return
+	for audio_name in ["WalkmanAudio", "WalkmanAudioB"]:
+		var a = player.find_child(audio_name, false, false)
+		if a:
+			a.process_mode = Node.PROCESS_MODE_ALWAYS
 
 func _setup_window_mode() -> void:
 	# Configure game to boot in Windowed Fullscreen (Borderless Fullscreen)
@@ -467,6 +501,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	# Toggle Character Sheet with 'C'
 	if event.is_action_pressed("toggle_character_sheet") or (event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_C):
 		toggle_character_sheet()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel") and character_sheet and character_sheet.visible:
+		close_character_sheet()
+		get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
 	anim_time += delta
@@ -522,6 +560,7 @@ func _on_health_changed(cur_hp: float, max_hp: float) -> void:
 		hp_label.text = "[center][b]HEALTH:[/b] [color=%s][b]%d[/b][/color] / [color=#00cc55]%d[/color] HP[/center]" % [hp_color, cur_i, max_i]
 
 func _on_player_died() -> void:
+	close_character_sheet()
 	if hp_label:
 		hp_label.text = "[center][b][color=#ff2233]⚠ CRITICAL BIO-FAILURE // FLATLINE[/color][/b][/center]"
 	if control_tip:
@@ -549,6 +588,8 @@ func show_message(msg: String) -> void:
 		control_tip.text = msg
 
 func show_victory_card() -> void:
+	victory_shown = true
+	close_character_sheet()
 	var lvl = player.call("get_level") if player and player.has_method("get_level") else 1
 	var vic = PanelContainer.new()
 	vic.set_anchors_preset(Control.PRESET_CENTER)
@@ -612,17 +653,45 @@ func _on_skates_toggled(is_equipped: bool) -> void:
 func toggle_character_sheet() -> void:
 	if not character_sheet:
 		return
-	character_sheet.visible = not character_sheet.visible
-	if player and player.has_method("set_movement_locked"):
-		player.call("set_movement_locked", character_sheet.visible)
 	if character_sheet.visible:
-		_refresh_character_sheet()
+		close_character_sheet()
+		return
+	open_character_sheet()
 
-func _on_close_sheet_pressed() -> void:
+func open_character_sheet() -> void:
+	if not character_sheet or character_sheet.visible:
+		return
+	# Guards: no sheet without a living player, or over the victory card.
+	if not player or victory_shown:
+		return
+	if player.has_method("is_dead") and player.call("is_dead"):
+		return
+	_keep_walkman_playing()
+	character_sheet.visible = true
+	if pause_dim:
+		pause_dim.visible = true
+	if player.has_method("set_movement_locked"):
+		player.call("set_movement_locked", true)
+	var tree := get_tree()
+	if tree:
+		tree.paused = true
+	_refresh_character_sheet()
+
+func close_character_sheet() -> void:
+	var was_open: bool = character_sheet != null and character_sheet.visible
 	if character_sheet:
 		character_sheet.visible = false
-	if player and player.has_method("set_movement_locked"):
-		player.call("set_movement_locked", false)
+	if pause_dim:
+		pause_dim.visible = false
+	var tree := get_tree()
+	if tree and tree.paused:
+		tree.paused = false
+	if was_open and player and is_instance_valid(player) and player.has_method("set_movement_locked"):
+		# Victory keeps the player locked; everything else releases the belt-and-braces lock.
+		player.call("set_movement_locked", victory_shown)
+
+func _on_close_sheet_pressed() -> void:
+	close_character_sheet()
 
 func _on_spend_stat(stat_name: String) -> void:
 	if not player:
@@ -818,6 +887,8 @@ func _update_pager_display() -> void:
 
 func _process_page_message(delta: float) -> void:
 	if pager_messages.is_empty():
+		return
+	if get_tree().paused:
 		return
 	var changed = false
 	for i in range(pager_messages.size() - 1, -1, -1):

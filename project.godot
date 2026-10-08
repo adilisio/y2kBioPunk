@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Y2"
+config/name="Y2K: Bio-Punk"
 config/description="A retro-future Y2K Bio-Punk Isometric ARPG built with Godot 4.3 and C++ GDExtension."
 run/main_scene="res://scenes/intro.tscn"
 run/flush_stdout_on_print=false

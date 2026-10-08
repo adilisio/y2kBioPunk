@@ -151,5 +151,5 @@ func _spawn_boss() -> void:
 		triggered = true
 
 	if trigger_once:
-		monitoring = false
+		set_deferred("monitoring", false)
 		set_process(false)

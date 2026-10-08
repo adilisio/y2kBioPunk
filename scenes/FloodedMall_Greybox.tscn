@@ -2779,6 +2779,7 @@ libraries = {
 }
 
 [node name="HUD" type="CanvasLayer" parent="."]
+process_mode = 3
 script = ExtResource("6_6i1rg")
 
 [node name="HUDOverlay" type="Control" parent="HUD"]
@@ -3090,7 +3091,7 @@ theme_override_constants/separation = 8
 [node name="TitleLabel" type="Label" parent="HUD/HUDOverlay/CharacterSheet/Margin/VBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0, 1, 0.8, 1)
-text = "== CHARACTER SHEET // STAT ALLOCATION =="
+text = "PAUSED // BIO-STATS"
 horizontal_alignment = 1
 
 [node name="LevelXPLabel" type="Label" parent="HUD/HUDOverlay/CharacterSheet/Margin/VBox"]
@@ -3167,7 +3168,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_colors/font_color = Color(0.65, 0.75, 0.8, 0.7)
 theme_override_font_sizes/font_size = 12
-text = "[C] Toggle | Walkman Tapes modify Effective Stats"
+text = "[C] or [ESC] resume  |  Walkman Tapes modify Effective Stats"
 horizontal_alignment = 1
 
 [node name="BtnCloseSheet" type="Button" parent="HUD/HUDOverlay/CharacterSheet/Margin/VBox"]

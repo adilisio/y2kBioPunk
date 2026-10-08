@@ -161,7 +161,7 @@ func _on_body_entered(body: Node3D) -> void:
 	if not tree:
 		tree = Engine.get_main_loop() as SceneTree
 	if tree:
-		tree.create_timer(0.4).timeout.connect(queue_free)
+		tree.create_timer(0.4, false).timeout.connect(queue_free)
 	else:
 		queue_free()
 

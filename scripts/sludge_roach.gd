@@ -41,6 +41,10 @@ var flash_tween: Tween = null
 var owns_pounce_slot := false
 var flank_offset_phase: float = 0.0
 var detection_area: Area3D = null
+var scuttle_time := 0.0
+var visual_rest_position := Vector3.ZERO
+var visual_rest_yaw := 0.0
+var motion_initialized := false
 
 const FX = preload("res://scripts/turret_mortar.gd")
 var dying := false
@@ -97,6 +101,20 @@ func _on_detection_body_exited(body: Node3D) -> void:
 	if body == target_player:
 		target_player = null
 		_enter_idle()
+
+func _process(delta: float) -> void:
+	if dying or not visual_mesh:
+		return
+	if not motion_initialized:
+		visual_rest_position = visual_mesh.position
+		visual_rest_yaw = visual_mesh.rotation.y
+		motion_initialized = true
+	scuttle_time += delta
+	var moving := Vector2(velocity.x, velocity.z).length_squared() > 0.01 and current_state != State.WINDUP
+	var scuttle := sin(scuttle_time * TAU * 9.0) if moving else 0.0
+	visual_mesh.position.y = visual_rest_position.y + 0.04 * scuttle
+	visual_mesh.rotation.y = visual_rest_yaw + deg_to_rad(4.0) * scuttle
+	# Scale belongs to the existing wind-up, pounce and hurt squash tweens.
 
 func _physics_process(delta: float) -> void:
 	if dying:

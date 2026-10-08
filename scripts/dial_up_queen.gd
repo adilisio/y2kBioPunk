@@ -55,6 +55,11 @@ var aoe_center := Vector3.ZERO
 var aoe_tween: Tween
 var aoe_flashing := false
 var wing_flap_timer: float = 0.0
+var visual_motion: Node3D
+var hover_time := 0.0
+var drift_time := 0.0
+var hover_rise := 0.0
+var detonation_squash := 0.0
 
 const FX = preload("res://scripts/turret_mortar.gd")
 var summon_tint: StandardMaterial3D
@@ -97,8 +102,6 @@ func _physics_process(delta: float) -> void:
 		var flap_angle = sin(wing_flap_timer) * 0.45
 		wing_left.rotation.z = flap_angle
 		wing_right.rotation.z = -flap_angle
-	elif uses_model and queen_body:
-		queen_body.position.y = sin(wing_flap_timer * 0.12) * 0.12 # hover bob stands in for the wing flap
 
 	_find_player()
 
@@ -118,6 +121,40 @@ func _physics_process(delta: float) -> void:
 			velocity.z = 0.0
 
 	move_and_slide()
+
+func _process(delta: float) -> void:
+	if dying or not visual_motion:
+		return
+	hover_time += delta
+	var drifting := current_state == State.IDLE or current_state == State.TRACKING
+	if drifting:
+		drift_time += delta
+	var phase := drift_time * TAU / 7.0
+	# Express the figure-eight in world axes: facing changes must not swing the offset.
+	var world_drift := Vector3(2.5 * sin(phase), 0.0, 2.5 * sin(phase) * cos(phase)) if drifting else Vector3.ZERO
+	var local_drift := global_transform.basis.inverse() * world_drift
+	visual_motion.position.x = lerpf(visual_motion.position.x, local_drift.x, minf(5.0 * delta, 1.0))
+	visual_motion.position.z = lerpf(visual_motion.position.z, local_drift.z, minf(5.0 * delta, 1.0))
+	var rise_target := 0.6 if current_state == State.AOE_ATTACK else 0.0
+	var spin_target := 0.0
+	if current_state == State.MINION_SUMMON:
+		spin_target = PI * 0.5 * clampf((1.5 - state_timer) / 1.5, 0.0, 1.0)
+	elif current_state == State.PHASE_TRANSITION:
+		var progress := clampf((1.8 - state_timer) / 1.8, 0.0, 1.0)
+		spin_target = TAU * progress
+		rise_target = 0.6 * sin(PI * progress)
+	if detonation_squash > 0.0:
+		detonation_squash = maxf(0.0, detonation_squash - delta)
+		hover_rise = 0.0
+	else:
+		hover_rise = lerpf(hover_rise, rise_target, minf(8.0 * delta, 1.0))
+	visual_motion.position.y = 0.35 * sin(hover_time * TAU / 0.7) + hover_rise
+	visual_motion.rotation.z = deg_to_rad(6.0) * sin(hover_time * TAU / 2.8)
+	if current_state == State.MINION_SUMMON or current_state == State.PHASE_TRANSITION:
+		visual_motion.rotation.y = spin_target
+	else:
+		visual_motion.rotation.y = lerp_angle(visual_motion.rotation.y, 0.0, minf(6.0 * delta, 1.0))
+	visual_motion.scale.y = 0.85 if detonation_squash > 0.0 else 1.0
 
 func _find_player() -> void:
 	if target_player and is_instance_valid(target_player):
@@ -279,6 +316,7 @@ func _process_aoe(delta: float) -> void:
 		_enter_idle()
 
 func _detonate_aoe() -> void:
+	detonation_squash = 0.15
 	var radius := _aoe_radius()
 	var damage := aoe_base_damage if current_phase == 1 else int(aoe_base_damage * 1.4)
 	_clear_telegraph()
@@ -490,7 +528,11 @@ func _die() -> void:
 		queue_free()
 
 func _build_visuals() -> void:
-	var model := EnemyModel.attach(self, model_path, model_height, 0.0, model_yaw, model_pitch)
+	# Only the visual assembly moves; colliders and the telegraph stay on the body root.
+	visual_motion = Node3D.new()
+	visual_motion.name = "QueenMotion"
+	add_child(visual_motion)
+	var model := EnemyModel.attach(visual_motion, model_path, model_height, 0.0, model_yaw, model_pitch)
 	if model:
 		queen_body = model
 		uses_model = true
@@ -511,14 +553,14 @@ func _build_visuals() -> void:
 	mat.emission_enabled = true
 	mat.emission = Color(0.8, 0.15, 0.5, 1.0)
 	thorax.material = mat
-	add_child(thorax)
+	visual_motion.add_child(thorax)
 	queen_body = thorax
 
 	# Antenna Array (Dial-Up server rods)
 	antenna_array = Node3D.new()
 	antenna_array.name = "AntennaArray"
 	antenna_array.position = Vector3(0.0, 3.2, 0.5)
-	add_child(antenna_array)
+	visual_motion.add_child(antenna_array)
 
 	var ant1 = CSGCylinder3D.new()
 	ant1.radius = 0.05
@@ -545,14 +587,14 @@ func _build_visuals() -> void:
 	wing_mat.emission_enabled = true
 	wing_mat.emission = Color(0.2, 0.6, 0.9, 0.5)
 	wing_left.material = wing_mat
-	add_child(wing_left)
+	visual_motion.add_child(wing_left)
 
 	wing_right = CSGBox3D.new()
 	wing_right.name = "WingRight"
 	wing_right.size = Vector3(2.2, 0.04, 1.0)
 	wing_right.position = Vector3(1.8, 2.2, -0.4)
 	wing_right.material = wing_mat
-	add_child(wing_right)
+	visual_motion.add_child(wing_right)
 
 	_build_shared_visuals()
 

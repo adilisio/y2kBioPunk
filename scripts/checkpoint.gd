@@ -8,6 +8,7 @@ class_name BioCheckpoint
 @export var checkpoint_id: String = "BioStabilizer_01"
 @export var respawn_offset: Vector3 = Vector3(0.0, 0.5, 1.5)
 
+var _last_save_msec: int = -1000
 var activated: bool = false
 var mesh: CSGBox3D = null
 
@@ -49,6 +50,9 @@ func _on_body_entered(body: Node3D) -> void:
 	if not (body.is_in_group("player") or body.name == "Player" or body is CharacterBody3D):
 		return
 
+	if Time.get_ticks_msec() - _last_save_msec < 1000:
+		return
+
 	var spawn_pos = global_position + respawn_offset
 
 	# Access SaveManager autoload
@@ -61,6 +65,13 @@ func _on_body_entered(body: Node3D) -> void:
 
 	if sm and sm.has_method("save_player_data"):
 		var success = sm.call("save_player_data", body, checkpoint_id, spawn_pos)
+		if success:
+			_last_save_msec = Time.get_ticks_msec()
+			if body.has_method("set_current_health") and body.has_method("get_max_health"):
+				body.set_current_health(body.get_max_health())
+			var hud = get_tree().get_first_node_in_group("hud")
+			if hud and hud.has_method("page_message"):
+				hud.page_message("PROGRESS SAVED // BIO-STABILIZER")
 		if success and mesh and mesh.material is StandardMaterial3D:
 			# Pulse green
 			var mat = mesh.material as StandardMaterial3D

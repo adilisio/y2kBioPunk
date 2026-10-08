@@ -23,7 +23,7 @@ func _ready() -> void:
 			if _is_player(body):
 				player_inside = true
 				if get_remaining_enemies_count() == 0:
-					_spawn_boss()
+					_spawn_boss(body)
 				break
 
 func _is_player(body: Node) -> bool:
@@ -109,14 +109,14 @@ func _on_body_entered(body: Node3D) -> void:
 		if hud and hud.has_method("show_message"):
 			hud.call("show_message", "[color=#ff2222][b]QUARANTINE BREACH // DIAL-UP QUEEN AWAKENS[/b][/color]")
 
-	_spawn_boss()
+	_spawn_boss(body)
 
 func _on_body_exited(body: Node3D) -> void:
 	if not _is_player(body):
 		return
 	player_inside = false
 
-func _spawn_boss() -> void:
+func _spawn_boss(player: Node3D = null) -> void:
 	if triggered:
 		return
 	print("[BossTrigger] Awakening Dial-Up Queen...")
@@ -149,6 +149,16 @@ func _spawn_boss() -> void:
 		
 		boss.add_to_group("boss")
 		triggered = true
+		if not is_instance_valid(player):
+			player = tree.get_first_node_in_group("player") if tree else null
+		var sm = get_node_or_null("/root/SaveManager")
+		if sm and is_instance_valid(player):
+			var respawn_pos: Vector3 = player.global_position
+			var checkpoint = tree.get_first_node_in_group("checkpoints")
+			if checkpoint is Node3D:
+				respawn_pos = checkpoint.global_position + checkpoint.respawn_offset
+			if sm.save_player_data(player, "ArenaGate", respawn_pos) and hud and hud.has_method("page_message"):
+				hud.page_message("PROGRESS SAVED // ARENA GATE")
 
 	if trigger_once:
 		set_deferred("monitoring", false)

@@ -214,7 +214,7 @@ func _enter_windup(dir: Vector3) -> void:
 		_flash_hit_visual()
 		var cue := create_tween()
 		cue.tween_property(visual_mesh, "scale", rest_scale * Vector3(1.3, 0.5, 1.3), 0.1)
-	print("[SludgeRoach] wind-up (0.35s)")
+	print_verbose("[SludgeRoach] wind-up (0.35s)")
 
 func _process_windup(delta: float) -> void:
 	state_timer -= delta
@@ -244,7 +244,7 @@ func _process_pouncing(delta: float) -> void:
 		if Vector2(offset.x, offset.z).length() <= 1.4 and absf(offset.y) <= 2.0:
 			if target_player.has_method("take_damage"):
 				target_player.call("take_damage", bite_damage)
-				print("[SludgeRoach] %s pounce bit player! Dealt %d damage" % [name, bite_damage])
+				print_verbose("[SludgeRoach] %s pounce bit player! Dealt %d damage" % [name, bite_damage])
 			_enter_repositioning()
 			return
 
@@ -282,7 +282,7 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_state == State.REPOSITIONING:
 		amount = int(ceil(amount * 1.5))
 	current_health -= amount
-	print("[SludgeRoach] %s took %d damage! HP: %d/%d" % [name, amount, max(0, current_health), max_health])
+	print_verbose("[SludgeRoach] %s took %d damage! HP: %d/%d" % [name, amount, max(0, current_health), max_health])
 
 	_flash_hit_visual()
 	_apply_squash_and_stretch()
@@ -383,7 +383,7 @@ func _die() -> void:
 	set_physics_process(false)
 	remove_from_group("enemies")
 	FX.burst(self, Color(0.4, 0.7, 0.1), 10, 0.25, 90)
-	print("[SludgeRoach] %s squashed! Sludge splattered." % name)
+	print_verbose("[SludgeRoach] %s squashed! Sludge splattered." % name)
 	var tree = get_tree()
 	if tree:
 		var p = tree.get_first_node_in_group("player")

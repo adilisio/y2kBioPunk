@@ -249,7 +249,7 @@ func _enter_aoe_attack() -> void:
 	var radius := _aoe_radius()
 	aoe_outline = _outline(radius, Color(1, 0.05, 0.02, 0.6))
 	_play_sfx(0.8, 1600.0, 0.35)
-	print("[DialUpQueen] >>> CHARGING MODEM SCREECH AOE! (Radius: %.1fm, charge %.1fs)" % [radius, state_timer])
+	print_verbose("[DialUpQueen] >>> CHARGING MODEM SCREECH AOE! (Radius: %.1fm, charge %.1fs)" % [radius, state_timer])
 	if aoe_telegraph_ring:
 		aoe_telegraph_ring.top_level = true
 		aoe_telegraph_ring.global_position = aoe_center
@@ -286,7 +286,7 @@ func _detonate_aoe() -> void:
 	var camera := get_viewport().get_camera_3d()
 	if camera and camera.get_parent().has_method("add_trauma"):
 		camera.get_parent().call("add_trauma", 0.5)
-	print("[DialUpQueen] Modem Screech detonated (%d damage, %.1fm)" % [damage, radius])
+	print_verbose("[DialUpQueen] Modem Screech detonated (%d damage, %.1fm)" % [damage, radius])
 	if is_instance_valid(target_player):
 		var offset: Vector3 = target_player.global_position - aoe_center
 		if Vector2(offset.x, offset.z).length() <= radius and absf(offset.y) <= 3.0 and target_player.has_method("take_damage"):
@@ -305,7 +305,7 @@ func _enter_minion_summon() -> void:
 	velocity.x = 0.0
 	velocity.z = 0.0
 
-	print("[DialUpQueen] >>> TRANSMITTING 56K HANDSHAKE... Summoning bio-minions!")
+	print_verbose("[DialUpQueen] >>> TRANSMITTING 56K HANDSHAKE... Summoning bio-minions!")
 
 	# Antenna charge animation
 	if antenna_array:
@@ -343,7 +343,7 @@ func _execute_summon() -> void:
 			minion.set_meta("summoned_by_boss", true)
 			get_parent().add_child(minion)
 			minion.global_position = spawn_pos
-			print("[DialUpQueen] Spawned bio-minion %s at %s" % [minion.name, spawn_pos])
+			print_verbose("[DialUpQueen] Spawned bio-minion %s at %s" % [minion.name, spawn_pos])
 
 # =============================================================================
 # PHASE TRANSITIONS & DAMAGE
@@ -395,12 +395,12 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		return
 	if is_invulnerable:
-		print("[DialUpQueen] Invulnerable during phase transition!")
+		print_verbose("[DialUpQueen] Invulnerable during phase transition!")
 		return
 
 	var dmg: int = int(amount)
 	current_health -= dmg
-	print("[DialUpQueen] Boss took %d damage! HP: %d/%d (Phase %d)" % [dmg, max(0, current_health), max_health, current_phase])
+	print_verbose("[DialUpQueen] Boss took %d damage! HP: %d/%d (Phase %d)" % [dmg, max(0, current_health), max_health, current_phase])
 
 	emit_signal("boss_health_changed", max(0, current_health), max_health, current_phase)
 	_flash_hit_visual()

@@ -242,7 +242,7 @@ func _enter_windup(dir: Vector3) -> void:
 			var pulse := create_tween()
 			pulse.tween_property(flash_mat, "emission_energy_multiplier", 0.9, 0.25)
 			pulse.tween_property(flash_mat, "emission_energy_multiplier", 0.45, 0.25)
-	print("[NeonDialUpCicada] wind-up (0.5s)")
+	print_verbose("[NeonDialUpCicada] wind-up (0.5s)")
 
 func _process_windup(delta: float) -> void:
 	state_timer -= delta
@@ -252,7 +252,7 @@ func _process_windup(delta: float) -> void:
 		attack_cooldown = 1.5
 		lunge_hit = false
 		_play_sfx(0.16, 1800.0, 0.2)
-		print("[NeonDialUpCicada] lunge (1.5m, 6 damage)")
+		print_verbose("[NeonDialUpCicada] lunge (1.5m, 6 damage)")
 
 func _process_lunge(delta: float) -> void:
 	state_timer -= delta
@@ -275,7 +275,7 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 		return
 
 	current_health -= amount
-	print("[NeonDialUpCicada] %s took %d damage! HP: %d/%d" % [name, amount, max(0, current_health), max_health])
+	print_verbose("[NeonDialUpCicada] %s took %d damage! HP: %d/%d" % [name, amount, max(0, current_health), max_health])
 
 	_flash_hit_visual()
 	_apply_squash_and_stretch()
@@ -340,7 +340,7 @@ func _die() -> void:
 	set_physics_process(false)
 	remove_from_group("enemies")
 	FX.burst(self, Color(0.1, 1, 0.7), 10, 0.25, 700)
-	print("[NeonDialUpCicada] %s was defeated! Dial-up carrier frequency severed." % name)
+	print_verbose("[NeonDialUpCicada] %s was defeated! Dial-up carrier frequency severed." % name)
 	var tree = get_tree()
 	if tree:
 		var p = tree.get_first_node_in_group("player")

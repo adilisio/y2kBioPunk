@@ -15,7 +15,23 @@ var elapsed := 0.0
 var exploded := false
 var landing_marker: CSGCylinder3D
 
+## Generated streams and burst materials are cached: synthesising a 0.35 s cue costs ~3 ms of GDScript and
+## building burst materials compiles new shader pipelines, and both used to run inside physics callbacks on
+## every hit, lunge, launch and splash (measured 11 ms physics spikes). Keys are quantised so near-identical
+## cues share one stream.
+static var _sound_cache: Dictionary = {}
+static var _burst_cache: Dictionary = {}
+
 static func sound(duration: float, frequency: float, noise: float = 0.0) -> AudioStreamWAV:
+	var key := "%d|%d|%d" % [int(round(duration * 100.0)), int(round(frequency)), int(round(noise * 100.0))]
+	var cached = _sound_cache.get(key)
+	if cached:
+		return cached
+	var wav := _synthesize(duration, frequency, noise)
+	_sound_cache[key] = wav
+	return wav
+
+static func _synthesize(duration: float, frequency: float, noise: float) -> AudioStreamWAV:
 	var wav := AudioStreamWAV.new()
 	wav.format = AudioStreamWAV.FORMAT_8_BITS
 	wav.mix_rate = 22050
@@ -28,6 +44,32 @@ static func sound(duration: float, frequency: float, noise: float = 0.0) -> Audi
 		data[i] = int(clampf(sample, -1.0, 1.0) * 100.0) & 255 # signed PCM8
 	wav.data = data
 	return wav
+
+static func _burst_kit(color: Color) -> Dictionary:
+	var key := color.to_html(false)
+	var kit = _burst_cache.get(key)
+	if kit:
+		return kit
+	var process := ParticleProcessMaterial.new()
+	process.direction = Vector3.UP
+	process.spread = 180.0
+	process.initial_velocity_min = 2.0
+	process.initial_velocity_max = 5.0
+	process.gravity = Vector3(0, -9.8, 0)
+	process.color = color
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.07
+	mesh.height = 0.14
+	mesh.radial_segments = 8
+	mesh.rings = 4
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	mesh.material = material
+	kit = {"process": process, "mesh": mesh}
+	_burst_cache[key] = kit
+	return kit
 
 static func floor_point(owner_node: Node3D, at: Vector3) -> Vector3:
 	var query := PhysicsRayQueryParameters3D.create(at + Vector3.UP * 3.0, at - Vector3.UP * 20.0, 1)
@@ -44,23 +86,9 @@ static func burst(owner_node: Node3D, color: Color, count: int, duration: float 
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.lifetime = 0.45
-	var process := ParticleProcessMaterial.new()
-	process.direction = Vector3.UP
-	process.spread = 180.0
-	process.initial_velocity_min = 2.0
-	process.initial_velocity_max = 5.0
-	process.gravity = Vector3(0, -9.8, 0)
-	process.color = color
-	particles.process_material = process
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.07
-	mesh.height = 0.14
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.emission_enabled = true
-	material.emission = color
-	mesh.material = material
-	particles.draw_pass_1 = mesh
+	var kit := _burst_kit(color)
+	particles.process_material = kit["process"]
+	particles.draw_pass_1 = kit["mesh"]
 	effect.add_child(particles)
 	var voice := AudioStreamPlayer3D.new()
 	voice.stream = sound(duration, frequency, 0.65)
@@ -179,7 +207,7 @@ func _explode() -> void:
 		if Vector2(offset.x, offset.z).length() <= 2.2 and absf(offset.y) <= 2.5 and player.has_method("take_damage"):
 			player.call("take_damage", damage, offset.normalized())
 	burst(self, Color(1, 0.35, 0.02), 8, 0.25, 65.0)
-	print("[TurretMortar] Splash at %s (radius 2.2m)" % global_position)
+	print_verbose("[TurretMortar] Splash at %s (radius 2.2m)" % global_position)
 	queue_free()
 
 func _exit_tree() -> void:

@@ -425,9 +425,12 @@ func _add_box(parent: Node, node_name: String, size: Vector3, pos: Vector3, mat:
 	box.name = node_name
 	box.size = size
 	box.position = pos
-	box.use_collision = true
+	box.use_collision = false # CSG collision is a trimesh; a BoxShape3D is ~10x cheaper for the enemy CharacterBodies
 	box.material = mat
 	parent.add_child(box)
+	var shape := BoxShape3D.new()
+	shape.size = size
+	_add_static_body(box, shape)
 	if Engine.is_editor_hint():
 		box.owner = get_tree().edited_scene_root if get_tree() else self
 	return box
@@ -439,12 +442,30 @@ func _add_cylinder(parent: Node, node_name: String, radius: float, height: float
 	cyl.height = height
 	cyl.sides = 16
 	cyl.position = pos
-	cyl.use_collision = true
+	cyl.use_collision = false
 	cyl.material = mat
 	parent.add_child(cyl)
+	var shape := CylinderShape3D.new()
+	shape.radius = radius
+	shape.height = height
+	_add_static_body(cyl, shape)
 	if Engine.is_editor_hint():
 		cyl.owner = get_tree().edited_scene_root if get_tree() else self
 	return cyl
+
+## Primitive-shape StaticBody3D parented to a CSG visual so it follows the visual's transform (ramps rotate after creation).
+func _add_static_body(visual: Node3D, shape: Shape3D) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.name = "Body"
+	var col := CollisionShape3D.new()
+	col.shape = shape
+	body.add_child(col)
+	visual.add_child(body)
+	if Engine.is_editor_hint():
+		var scene_owner = get_tree().edited_scene_root if get_tree() else self
+		body.owner = scene_owner
+		col.owner = scene_owner
+	return body
 
 func _add_grind_rail(parent: Node, rail_name: String, points: Array[Vector3], mat: StandardMaterial3D) -> Path3D:
 	var path_node = Path3D.new()

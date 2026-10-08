@@ -219,7 +219,7 @@ func _launch_mortar() -> void:
 	target_pos = spawn_pos + offset.normalized() * clampf(offset.length(), 6.0, 18.0)
 	target_pos = FX.floor_point(self, target_pos)
 
-	print("[CorruptedKioskTurret] %s FIRED bio-sludge artillery at %s!" % [name, target_pos])
+	print_verbose("[CorruptedKioskTurret] %s FIRED bio-sludge artillery at %s!" % [name, target_pos])
 
 	var mortar: Node3D = null
 	if mortar_scene and mortar_scene.can_instantiate():
@@ -250,7 +250,7 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 		return
 
 	current_health -= amount
-	print("[CorruptedKioskTurret] %s took %d damage! HP: %d/%d" % [name, amount, max(0, current_health), max_health])
+	print_verbose("[CorruptedKioskTurret] %s took %d damage! HP: %d/%d" % [name, amount, max(0, current_health), max_health])
 
 	_flash_hit_visual()
 	_shake_hit_reaction()
@@ -389,7 +389,7 @@ func _die() -> void:
 		hit_tween.kill()
 	if charge_tween and charge_tween.is_valid():
 		charge_tween.kill()
-	print("[CorruptedKioskTurret] %s collapsed! Bio-circuitry breached." % name)
+	print_verbose("[CorruptedKioskTurret] %s collapsed! Bio-circuitry breached." % name)
 	
 	var tree = get_tree()
 	if tree:

@@ -281,7 +281,7 @@ void PlayerController::recalculate_derived_stats() {
 
 void PlayerController::gain_xp(int p_amount) {
 	current_xp += p_amount;
-	UtilityFunctions::print("[Y2K-XP] Gained ", p_amount, " XP! (Progress: ", current_xp, "/", xp_to_level, ")");
+	UtilityFunctions::print_verbose("[Y2K-XP] Gained ", p_amount, " XP! (Progress: ", current_xp, "/", xp_to_level, ")");
 
 	int xp_iterations = 0;
 	while (current_xp >= xp_to_level) {
@@ -1637,7 +1637,7 @@ bool PlayerController::get_is_skating() const {
 void PlayerController::set_is_skating(bool p_skating) {
 	is_skating = p_skating;
 	is_equipped_skates = p_skating;
-	UtilityFunctions::print("[Y2K-EQUIPMENT] Roller skates ", is_skating ? "EQUIPPED! (12.0 m/s)" : "UNEQUIPPED! (Walking)");
+	UtilityFunctions::print_verbose("[Y2K-EQUIPMENT] Roller skates ", is_skating ? "EQUIPPED! (12.0 m/s)" : "UNEQUIPPED! (Walking)");
 	emit_signal("skates_toggled", is_skating);
 }
 
@@ -2309,7 +2309,7 @@ bool PlayerController::try_start_grind(Path3D *p_path) {
 		}
 	}
 
-	UtilityFunctions::print("[Y2K-GRIND] >>> ENTERED STATE_GRINDING on rail '", p_path->get_name(), "'! Speed: ", grind_speed, " m/s | Dir: ", grind_direction > 0 ? "Forward" : "Backward", " | Progress: ", closest_offset, "/", baked_len);
+	UtilityFunctions::print_verbose("[Y2K-GRIND] >>> ENTERED STATE_GRINDING on rail '", p_path->get_name(), "'! Speed: ", grind_speed, " m/s | Dir: ", grind_direction > 0 ? "Forward" : "Backward", " | Progress: ", closest_offset, "/", baked_len);
 	play_sfx("grind_start");
 	play_sfx("grind_loop");
 	emit_signal("grind_started", p_path, grind_speed);
@@ -2352,7 +2352,7 @@ void PlayerController::dismount_grind(const Vector3 &p_exit_velocity) {
 		anim_player->play(anim_to_play);
 	}
 
-	UtilityFunctions::print("[Y2K-GRIND] <<< EXITED STATE_GRINDING! Restored exit momentum: ", exit_vel);
+	UtilityFunctions::print_verbose("[Y2K-GRIND] <<< EXITED STATE_GRINDING! Restored exit momentum: ", exit_vel);
 }
 
 void PlayerController::_on_grind_area_entered(Area3D *p_area) {
@@ -2538,7 +2538,7 @@ void PlayerController::start_evade(const Vector3 &p_direction) {
 		}
 	}
 
-	UtilityFunctions::print("[Y2K-MOVEMENT] >>> POWER-SLIDE EVADE! Boost: ", evade_speed, " m/s (Invincible for ", 0.18f, "s)");
+	UtilityFunctions::print_verbose("[Y2K-MOVEMENT] >>> POWER-SLIDE EVADE! Boost: ", evade_speed, " m/s (Invincible for ", 0.18f, "s)");
 	play_sfx("evade");
 	emit_signal("evade_started", evade_direction, evade_speed);
 }
@@ -2568,7 +2568,7 @@ void PlayerController::execute_grind_slam(const Vector3 &p_direction) {
 	Vector3 slam_pos = is_inside_tree() ? get_global_position() : get_position();
 
 	float slam_damage = base_slam_damage + static_cast<float>(get_effective_strength()) * 3.0f + (current_adrenaline * 0.25f);
-	UtilityFunctions::print("[Y2K-GRIND] *BOOM!* Rail Dismount Shockwave Slam! Dealing ", slam_damage, " damage (Radius: ", slam_radius, "m)");
+	UtilityFunctions::print_verbose("[Y2K-GRIND] *BOOM!* Rail Dismount Shockwave Slam! Dealing ", slam_damage, " damage (Radius: ", slam_radius, "m)");
 	play_sfx("slam");
 	hit_stop(0.10f);
 	add_camera_trauma(0.6f);
@@ -2701,10 +2701,10 @@ void PlayerController::cycle_secondary_weapon() {
 		if (flame_particles) {
 			flame_particles->set_emitting(false);
 		}
-		UtilityFunctions::print("[Y2K-ARSENAL] Switched secondary weapon to: [Y2K Mini-Disc Launcher]");
+		UtilityFunctions::print_verbose("[Y2K-ARSENAL] Switched secondary weapon to: [Y2K Mini-Disc Launcher]");
 	} else {
 		current_secondary = SECONDARY_SPRAY_FLAMETHROWER;
-		UtilityFunctions::print("[Y2K-ARSENAL] Switched secondary weapon to: [Aerosol Spray Paint Flamethrower]");
+		UtilityFunctions::print_verbose("[Y2K-ARSENAL] Switched secondary weapon to: [Aerosol Spray Paint Flamethrower]");
 	}
 	emit_signal("secondary_weapon_switched", static_cast<int>(current_secondary), get_secondary_weapon_name());
 }
@@ -2766,7 +2766,7 @@ void PlayerController::fire_spray_flamethrower() {
 	Vector3 my_pos = is_inside_tree() ? get_global_position() : get_position();
 	Vector3 fire_dir = facing_direction;
 
-	UtilityFunctions::print("[Y2K-ARSENAL] *FSSSSHHH-WHOOSH!* Aerosol Spray Flamethrower streaming flames! DMG tick: ", flame_damage);
+	UtilityFunctions::print_verbose("[Y2K-ARSENAL] *FSSSSHHH-WHOOSH!* Aerosol Spray Flamethrower streaming flames! DMG tick: ", flame_damage);
 
 	Node *parent = get_parent();
 	if (parent) {
@@ -2829,7 +2829,7 @@ void PlayerController::fire_disk_launcher() {
 	Vector3 fire_dir = facing_direction;
 	Vector3 spawn_pos = my_pos + fire_dir * 1.0f + Vector3(0.0f, 0.8f, 0.0f);
 
-	UtilityFunctions::print("[Y2K-ARSENAL] *SHICK-ZWIP!* Fired Y2K Mini-Disc! DMG: ", disk_damage);
+	UtilityFunctions::print_verbose("[Y2K-ARSENAL] *SHICK-ZWIP!* Fired Y2K Mini-Disc! DMG: ", disk_damage);
 	play_sfx("disk_fire");
 
 	Node *parent = get_parent();

@@ -76,6 +76,75 @@ func _run_steps() -> void:
 				return
 			"fps":
 				await _measure_fps(float(parts[1]))
+			"cap":
+				Engine.max_fps = int(parts[1])
+				await process_frame
+			"off":
+				# off:<substring> frees every node whose name or script path contains the substring (subtraction A/B)
+				var removed := 0
+				for n in _all(current_scene):
+					if not is_instance_valid(n) or n == current_scene:
+						continue
+					var sp := String(n.get_script().resource_path) if n.get_script() else ""
+					if String(n.name).containsn(parts[1]) or sp.containsn(parts[1]):
+						n.queue_free()
+						removed += 1
+				print("[HARNESS] off:%s removed %d nodes" % [parts[1], removed])
+				await process_frame
+				await process_frame
+			"vsync":
+				DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if parts[1] == "1" else DisplayServer.VSYNC_DISABLED)
+				await process_frame
+			"enemies":
+				if parts[1] == "0":
+					for n in get_nodes_in_group("enemies"):
+						n.queue_free()
+				await process_frame
+			"profile":
+				await _profile_physics(float(parts[1]))
+			"bench":
+				await _bench_cue_path()
+			"allareas":
+				var count := 0
+				for a in _all(current_scene):
+					if a is Area3D:
+						(a as Area3D).monitoring = parts[1] == "1"
+						count += 1
+				print("[HARNESS] allareas:%s touched %d areas" % [parts[1], count])
+				await process_frame
+			"enemyareas":
+				var count := 0
+				for e in get_nodes_in_group("enemies"):
+					for a in _all(e):
+						if a is Area3D:
+							(a as Area3D).monitoring = parts[1] == "1"
+							(a as Area3D).monitorable = parts[1] == "1"
+							count += 1
+				print("[HARNESS] enemyareas:%s touched %d areas" % [parts[1], count])
+				await process_frame
+			"bodies":
+				# bodies:<parent-name-substring>:<0|1> toggles StaticBody3D collision under matching parents
+				var count := 0
+				for n in _all(current_scene):
+					if n is StaticBody3D and n.get_parent() and String(n.get_parent().name).containsn(parts[1]):
+						(n as StaticBody3D).collision_layer = 1 if parts[2] == "1" else 0
+						count += 1
+				print("[HARNESS] bodies:%s:%s touched %d bodies" % [parts[1], parts[2], count])
+				await process_frame
+			"kill":
+				var removed := 0
+				for n in get_nodes_in_group("enemies"):
+					if String(n.name).containsn(parts[1]) or (n.get_script() and String(n.get_script().resource_path).containsn(parts[1])):
+						n.queue_free()
+						removed += 1
+				print("[HARNESS] kill:%s removed %d" % [parts[1], removed])
+				await process_frame
+			"railcol", "csgcol":
+				for n in _all(current_scene):
+					if n is CSGShape3D and (parts[0] == "csgcol" or n is CSGPolygon3D):
+						(n as CSGShape3D).use_collision = parts[1] == "1"
+				await process_frame
+				await process_frame
 			"scale":
 				root.get_viewport().scaling_3d_scale = float(parts[1])
 				await process_frame
@@ -100,6 +169,185 @@ func _run_steps() -> void:
 			_:
 				push_warning("[HARNESS] unknown step: %s" % s)
 
+## Attributes physics-tick time to script groups by ordering `_physics_process` with process_physics_priority:
+## marker nodes stamp the clock between groups. Enemies are re-prioritised cicada=10, turret=20, roach=30,
+## boss=40; everything left at 0 (player, camera, mortars, pickups) lands in the first bucket. The gap between
+## the summed script time and Performance.TIME_PHYSICS_PROCESS is the physics server step itself.
+func _profile_physics(seconds: float) -> void:
+	var groups := {"cicada": 10, "turret": 20, "roach": 30, "queen": 40}
+	for n in get_nodes_in_group("enemies"):
+		var path := String(n.get_script().resource_path) if n.get_script() else ""
+		for g in groups:
+			if path.containsn(g) or String(n.name).containsn(g):
+				n.process_physics_priority = groups[g]
+	var marker_src := GDScript.new()
+	marker_src.source_code = "extends Node\nvar stamps: Array = []\nfunc _physics_process(_d):\n\tstamps.append(Time.get_ticks_usec())\n"
+	marker_src.reload()
+	var order := [["start", -100], ["after_default", 5], ["after_cicada", 15], ["after_turret", 25], ["after_roach", 35], ["after_queen", 45]]
+	var markers: Array = []
+	for o in order:
+		var m := Node.new()
+		m.name = "ProfMarker_%s" % o[0]
+		m.set_script(marker_src)
+		m.process_physics_priority = o[1]
+		root.add_child(m)
+		markers.append(m)
+	var tick_total := 0.0
+	var tick_max := 0.0
+	var ticks := 0
+	# Phase split: physics_frame signal (start of SceneTree physics) -> first marker = pre-callback work;
+	# last marker -> next process_frame = server step + post-callback flush (+ loop overhead).
+	var pf_stamps: Array = []
+	var idle_stamps: Array = []
+	var draw_stamps: Array = []
+	var on_pf := func(): pf_stamps.append(Time.get_ticks_usec())
+	var on_idle := func(): idle_stamps.append(Time.get_ticks_usec())
+	var on_draw := func(): draw_stamps.append(Time.get_ticks_usec())
+	physics_frame.connect(on_pf)
+	process_frame.connect(on_idle)
+	RenderingServer.frame_post_draw.connect(on_draw)
+	var t0 := Time.get_ticks_usec()
+	while (Time.get_ticks_usec() - t0) / 1_000_000.0 < seconds:
+		await physics_frame
+		var ph: float = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+		tick_total += ph
+		tick_max = max(tick_max, ph)
+		ticks += 1
+	physics_frame.disconnect(on_pf)
+	process_frame.disconnect(on_idle)
+	RenderingServer.frame_post_draw.disconnect(on_draw)
+	# Frame anatomy: idle(process_frame) -> post_draw = render+present; post_draw -> next physics_frame = limiter sleep + pre-physics engine work
+	var a_sum := 0.0
+	var b_sum := 0.0
+	var a_max := 0.0
+	var n_ab := 0
+	for d in draw_stamps:
+		var prev_idle: int = -1
+		for s in idle_stamps:
+			if s <= d and s > prev_idle:
+				prev_idle = s
+		var next_pf: int = -1
+		for s in pf_stamps:
+			if s > d and (next_pf < 0 or s < next_pf):
+				next_pf = s
+		if prev_idle < 0 or next_pf < 0:
+			continue
+		b_sum += (d - prev_idle) / 1000.0
+		var a: float = (next_pf - d) / 1000.0
+		a_sum += a
+		a_max = max(a_max, a)
+		n_ab += 1
+	print("[PROF] frame anatomy over %d frames: idle->post_draw (render+present) avg=%.2f ms | post_draw->next physics_frame (sleep+pre-physics) avg=%.2f ms max=%.2f ms" % [n_ab, b_sum / max(1, n_ab), a_sum / max(1, n_ab), a_max])
+	var pre_sum := 0.0
+	var post_sum := 0.0
+	var post_max := 0.0
+	var split_n := 0
+	for i in min(markers[0].stamps.size(), markers[5].stamps.size()):
+		# pre-callback: gap from the latest physics_frame signal at or before this tick's first marker
+		var m0: int = markers[0].stamps[i]
+		var best: int = -1
+		for s in pf_stamps:
+			if s <= m0 and s > best:
+				best = s
+		if best < 0 or m0 - best > 50000:
+			continue
+		pre_sum += (m0 - best) / 1000.0
+		# next idle frame after this tick's last marker
+		var last_stamp: int = markers[5].stamps[i]
+		for s in idle_stamps:
+			if s > last_stamp:
+				var d: float = (s - last_stamp) / 1000.0
+				post_sum += d
+				post_max = max(post_max, d)
+				break
+		split_n += 1
+	print("[PROF] split over %d ticks: pre-callback avg=%.2f ms | last-marker->next idle frame avg=%.2f ms max=%.2f ms" % [split_n, pre_sum / max(1, split_n), post_sum / max(1, split_n), post_max])
+	var n_ticks: int = markers[0].stamps.size()
+	var labels := ["default(player,camera,mortars)", "cicadas", "turrets", "roaches", "queen"]
+	var sums := [0.0, 0.0, 0.0, 0.0, 0.0]
+	var maxes := [0.0, 0.0, 0.0, 0.0, 0.0]
+	for i in n_ticks:
+		for b in 5:
+			if markers[b + 1].stamps.size() > i and markers[b].stamps.size() > i:
+				var d: float = (markers[b + 1].stamps[i] - markers[b].stamps[i]) / 1000.0
+				sums[b] += d
+				maxes[b] = max(maxes[b], d)
+	var script_sum := 0.0
+	for b in 5:
+		script_sum += sums[b]
+	print("[PROF] ticks=%d physics tick avg=%.2f ms max=%.2f ms | scripts avg=%.2f ms | server+rest avg=%.2f ms | tps=%d max_fps=%d vsync=%d steps/frame=%d" % [
+		n_ticks, tick_total / max(1, ticks), tick_max, script_sum / max(1, n_ticks), tick_total / max(1, ticks) - script_sum / max(1, n_ticks),
+		Engine.physics_ticks_per_second, Engine.max_fps, DisplayServer.window_get_vsync_mode(), Engine.max_physics_steps_per_frame])
+	for b in 5:
+		print("[PROF]   %-32s avg=%.2f ms max=%.2f ms" % [labels[b], sums[b] / max(1, n_ticks), maxes[b]])
+	for m in markers:
+		m.queue_free()
+
+## Times the individual operations of an enemy attack cue in the live scene (real renderer + audio).
+func _bench_cue_path() -> void:
+	var cicada: Node = null
+	for n in get_nodes_in_group("enemies"):
+		if String(n.name).containsn("cicada"):
+			cicada = n
+			break
+	if cicada == null:
+		print("[BENCH] no cicada")
+		return
+	var FX = load("res://scripts/turret_mortar.gd")
+	var model: Node = cicada.get("visual_mesh")
+	var player: Node = get_first_node_in_group("player")
+	var results := {}
+	var timed := func(label: String, fn: Callable):
+		var t0 := Time.get_ticks_usec()
+		fn.call()
+		results[label] = (Time.get_ticks_usec() - t0) / 1000.0
+	for rep in 3:
+		await process_frame
+		timed.call("tint_material+tint (new mat)", func():
+			var m = EnemyModel.tint_material(Color(1.0, 0.12, 0.12), 0.55, 0.45)
+			EnemyModel.tint(model, m))
+		await process_frame
+		timed.call("untint", func(): EnemyModel.untint(model))
+		await process_frame
+		var mat = EnemyModel.tint_material(Color(1.0, 0.12, 0.12), 0.55, 0.45)
+		timed.call("tint (reused mat)", func(): EnemyModel.tint(model, mat))
+		await process_frame
+		EnemyModel.untint(model)
+		await process_frame
+		timed.call("sfx stream (cached) + play", func():
+			var sfx: AudioStreamPlayer3D = cicada.get("sfx")
+			sfx.stream = FX.sound(0.25, 900.0, 0.2)
+			sfx.play())
+		await process_frame
+		timed.call("AudioStreamPlayer3D new+add+play", func():
+			var v := AudioStreamPlayer3D.new()
+			cicada.add_child(v)
+			v.stream = FX.sound(0.25, 900.0, 0.2)
+			v.play()
+			v.queue_free())
+		await process_frame
+		timed.call("print x3", func():
+			print("[BENCH] print cost probe 1")
+			print("[BENCH] print cost probe 2")
+			print("[BENCH] print cost probe 3"))
+		await process_frame
+		timed.call("2 tweens on model scale", func():
+			var t := cicada.create_tween()
+			t.tween_property(model, "scale", Vector3(1.4, 0.8, 1.4), 0.25)
+			t.tween_property(model, "scale", Vector3.ONE, 0.25)
+			var p := cicada.create_tween()
+			p.tween_property(model, "position", model.position, 0.1))
+		await process_frame
+		if player and player.has_method("take_damage"):
+			timed.call("player.take_damage(0)", func(): player.call("take_damage", 0, Vector3.ZERO))
+		await process_frame
+		timed.call("FX.burst (cached kit)", func(): FX.burst(cicada, Color.RED, 8, 0.25, 90))
+		await process_frame
+		var line := "[BENCH] rep %d:" % rep
+		for k in results:
+			line += " | %s=%.2f ms" % [k, results[k]]
+		print(line)
+
 func _env() -> Environment:
 	for n in _all(current_scene):
 		if n is WorldEnvironment and (n as WorldEnvironment).environment:
@@ -117,18 +365,45 @@ func _all(node: Node) -> Array:
 
 ## Samples frame times for `seconds` with vsync off and prints avg / 1%-low fps plus the render setup.
 func _measure_fps(seconds: float) -> void:
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	if Engine.max_fps == 0:
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED) # uncapped: measure headroom
 	RenderingServer.viewport_set_measure_render_time(root.get_viewport().get_viewport_rid(), true)
 	for i in 20:
 		await process_frame
 	var times: Array[float] = []
+	var phys_max := 0.0
+	var phys_sum := 0.0
+	var proc_max := 0.0
 	var t0 := Time.get_ticks_usec()
 	var last := t0
+	var slow_threshold_ms := 1000.0 / 60.0 * 1.3 # a frame that missed a 60 Hz vblank
 	while (Time.get_ticks_usec() - t0) / 1_000_000.0 < seconds:
 		await process_frame
 		var now := Time.get_ticks_usec()
-		times.append((now - last) / 1000.0)
+		var ft: float = (now - last) / 1000.0
+		times.append(ft)
 		last = now
+		if ft > slow_threshold_ms:
+			# Printed in stream order, so the gameplay lines just above it are the events of that frame.
+			print("[FPS] SLOW FRAME t=%.2fs %.1f ms (objects=%d draw_calls=%d)" % [(now - t0) / 1_000_000.0, ft,
+				Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME), Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)])
+		var ph: float = Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+		phys_sum += ph
+		phys_max = max(phys_max, ph)
+		proc_max = max(proc_max, Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)
+	var unsorted_avg := 0.0
+	for t in times:
+		unsorted_avg += t
+	unsorted_avg /= max(1, times.size())
+	var spikes := 0
+	for t in times:
+		if t > unsorted_avg * 2.0:
+			spikes += 1
+	print("[FPS] physics avg=%.2f ms max=%.2f ms | process max=%.2f ms | frames over 2x avg: %d of %d | active_objects=%d collision_pairs=%d islands=%d" % [
+		phys_sum / max(1, times.size()), phys_max, proc_max, spikes, times.size(),
+		Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS),
+		Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS),
+		Performance.get_monitor(Performance.PHYSICS_3D_ISLAND_COUNT)])
 	times.sort()
 	var sum := 0.0
 	for t in times:

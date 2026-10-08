@@ -144,7 +144,7 @@ func _on_body_entered(body: Node3D) -> void:
 			body.emit_signal("health_changed", body.current_health, body.max_health)
 
 	cur_hp = body.get_current_health() if body.has_method("get_current_health") else (body.current_health if "current_health" in body else 0.0)
-	print("[FruitCandy] *YUM!* Devoured fruit candy Gusher pack! Restored %d HP (HP: %d/%d)" % [int(heal_amount), int(cur_hp), int(max_hp)])
+	print_verbose("[FruitCandy] *YUM!* Devoured fruit candy Gusher pack! Restored %d HP (HP: %d/%d)" % [int(heal_amount), int(cur_hp), int(max_hp)])
 
 	# 2. Play YUM sound effect
 	if body.has_method("play_sfx"):

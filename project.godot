@@ -13,6 +13,8 @@ config_version=5
 config/name="Y2"
 config/description="A retro-future Y2K Bio-Punk Isometric ARPG built with Godot 4.3 and C++ GDExtension."
 run/main_scene="res://scenes/intro.tscn"
+run/flush_stdout_on_print=false
+run/flush_stdout_on_print.debug=false
 config/features=PackedStringArray("4.3", "Forward Plus")
 config/icon="res://icon.svg"
 

@@ -6,58 +6,43 @@
 
 ## 1. Executive Summary
 
-**Y2K: Bio-Punk ARPG** is a retro-future isometric action role-playing game built in **Godot 4.3** (Forward+) powered by a high-performance **C++ GDExtension** core (`libbiopunk`).
+**Y2K: Bio-Punk ARPG** is a retro-future isometric action role-playing game built in **Godot 4.3** (Forward+) powered by a **C++ GDExtension** core (`libbiopunk`) with GDScript gameplay systems.
 
-The game fuses late-90s/Y2K street-culture aesthetics—roller skates, cassette mixtapes, pagers, CRT monitors, and translucent colored plastic—with a gritty bio-punk apocalyptic world overrun by mutated fauna, bio-engineered contamination, and stranded military remnants.
+The game fuses late-90s/Y2K street-culture aesthetics—roller skates, cassette mixtapes, pagers, CRT monitors, and translucent colored plastic—with a gritty bio-punk apocalyptic world overrun by mutated fauna and bio-engineered contamination.
 
 ---
 
 ## 2. The Vision: Thematic & Gameplay Pillars
 
 ### A. Thematic Identity: The "Millennium Glitch"
-At midnight on December 31, 1999, automated bio-remediation protocols across military and municipal networks triggered a catastrophic mutation cascade instead of safeguarding infrastructure. Experimental bio-engineered agents consumed urban sprawl, releasing hyper-adaptive biological contaminants. Survivors scavenge decaying shopping malls, sewer lines, and abandoned transit tunnels, clinging to late-90s analog tech: translucent electronics, CRT pagers, and magnetic cassette tapes that resonate with bio-frequency shielding.
+At midnight on December 31, 1999, automated bio-remediation protocols across military and municipal networks triggered a catastrophic mutation cascade instead of safeguarding infrastructure. Survivors scavenge decaying shopping malls, sewer lines, and abandoned transit tunnels, clinging to late-90s analog tech: translucent electronics, CRT pagers, and magnetic cassette tapes that resonate with bio-frequency shielding.
 
 ### B. Core Gameplay Pillars
-1. **High-Speed Momentum & Urban Traversal**:
-   Flow seamlessly between grounded running, 12 m/s roller skate sprinting, vertical jumping with preserved air momentum, and spline-based rail grinding along mall handrails and pipes. A dedicated evade/power-slide (Shift/V) lets you dodge through enemy attacks with invincibility frames.
-2. **Tactile, Multi-Weapon Street Combat**:
-   High-cadence melee (baseball bat combos) governed by strict spatial hitboxes (`Area3D`), attack acceleration, and directional knockback. A secondary off-hand weapon slot (Aerosol Flamethrower / Disk Launcher) adds ranged threat. Jumping off a grind rail triggers a directional shockwave slam attack.
-3. **Diegetic Walkman Audio-Buff Synergy**:
-   An in-game Walkman cassette deck dynamically alters RPG stats (STR, AGI, VIT, VIBE) in real-time. Genre-themed tapes (*Nu-Metal, Eurodance, Big-Beat Rave, Bubblegum Pop, Skater Punk, Hip-Hop Bounce, Pop-Rock Anthem, Combat FIGHT*) match player playstyle to musical rhythm.
-4. **Retro Low-Poly Aesthetic**:
-   Visual style inspired by late PS1 and Sega Dreamcast era: crisp low-poly meshes (Meshy AI-generated player character), uncalibrated vertex colors, CRT scanlines, and saturated neon-acid palettes.
+1. **High-Speed Momentum & Urban Traversal**: grounded running, 12 m/s roller skating with carving, jumps that keep momentum, spline rail grinding with a dismount slam, and an evade with invulnerability frames.
+2. **Tactile Street Combat**: a buffered baseball-bat combo with hit-stop and knockback, a flamethrower and a disk launcher in the off hand, and enemies that telegraph (amber wind-ups) before they bite.
+3. **Diegetic Walkman Audio-Buff Synergy**: the in-game Walkman alters STR, AGI, VIT and VIBE in real time; eight genre tapes, each a different build.
+4. **Retro Low-Poly Aesthetic**: late PS1/Dreamcast-era look, night-mall teal palette with magenta mutants and neon signage, CRT pager HUD.
 
 ---
 
 ## 3. Current State of Development
 
-Status as of October 7, 2026, grounded in the Director ledger's **Verified (merged to main)** entries. Historical audit baselines describe earlier defects, not the current slice.
+Status as of October 8, 2026: **Vertical Slice 1.1, the "showable build", is complete except for the owner's final playtest.** The authoritative record is `ops/DIRECTOR_LEDGER.md`.
 
-### Playable Flow and Progression (WP-1)
+### The slice (15-ish minutes, one run)
+Intro video → menu → New Game. The player spawns in the flooded mall atrium beside a Bio-Stabilizer terminal, meets two Neon Cicadas within seconds, learns evade, tapes, skates, secondary weapons, grinding and turret reading from the pager as each becomes relevant, clears Sludge Roach packs at the fountain basin and two Corrupted Kiosk Turrets by the kiosks, levels up and spends points in a character sheet that pauses the game, and crosses the arena gate (which saves progression) to wake the three-phase Dial-Up Queen in her neon "MEGABYTE ELECTRONICS" server pit. Victory makes the player invulnerable, clears the floor, shows a completion card and returns to the menu; Continue restores the checkpoint. Death respawns at the Bio-Stabilizer with progression intact; enemies respawn (owner decision).
 
-F5 runs the intro and menu; New Game clears stale saves and enters `scenes/FloodedMall_Greybox.tscn` with full health at level 1. Continue restores checkpoint progression. Enemies award XP exactly once on death. Bio-Stabilizers save stats, tape, XP, points and position; death reloads and restores the checkpoint with full health. The boss wakes on arena entry at z = -19 without requiring a mall clear. Defeat shows a victory card, records `slice_complete` and returns to the menu.
+### What VS1.1 added over VS1 (all verified on `main`)
+- A standalone Windows package (`build/Y2K-BioPunk-VS1.1-win64.zip`, 244 MB) with a validated export/release path and packaged smoke tests.
+- Player occlusion fading for pillars, walls, mezzanine rails and kiosk props.
+- Character sheet pauses the game with a clear overlay; project title and menu cleaned up.
+- Presentation pass: tiled floor, wall trims, pillar caps, neon signage, dressed boss arena, checkpoint terminal, menu background, HUD fixes, softer tints, turret screen, water, shadow quality.
+- Gameplay critic fixes: no silent progress loss, safe victory window, truthful and complete pager, telegraph colour semantics, Queen phase-3 timing and summon warning, disk/slam/cicada tuning, turrets idle during the boss, roach knockback.
+- Effect warm-up before the first fight; performance re-measured at ~120 fps uncapped / stable 60 capped on the target laptop.
+- 23 headless suites (VS1's 19 plus occlusion, character sheet, tuning, warm-up).
 
-### Player Feel and Camera (WP-2 and Director Integration)
-
-The native six-state controller uses `set_state` for transitions and exit cleanup; attacks during evade are refused. Grounded animation poses, looping/blended locomotion and speed matching replace the floating frozen model. Walking accelerates and brakes; skating coasts and carves; air steering preserves momentum. Jumps support release cutting, coyote time and buffering. Buffered melee combos align damage with animation, add hit-stop and camera shake. Hurt feedback includes flash, sound, knockback and 0.6 s immunity. Rail entry checks movement/alignment and airborne/jump intent; manual dismount queues its slam until landing. The follow camera uses a 12 m arm and 45-degree FOV.
-
-The flamethrower and disk launcher are active secondary weapons. Walkman tapes alter effective STR, AGI, VIT and VIBE. Native synthesized SFX use signed PCM and cached rotating voices. The registered soldier and native bug enemy are unused by the active slice.
-
-### Presentation and Runtime Level (WP-3)
-
-The runtime mall builder is the source of truth, replacing stale baked geometry. Environment glow, SSAO and fog, brighter lighting, emissive rails, contrasting enemy silhouettes and cutaway walls improve readability. The HUD uses native scale with health/XP/stat readouts, adrenaline, queued pager messages, Walkman display and a character sheet.
-
-### Encounters and Balance (WP-4 and Director Pass)
-
-The pre-boss roster contains nine enemies worth 170 experience points. Cicadas have telegraphed contact lunges (70 HP); roaches wind up before pouncing and have vulnerable recovery with pack limits (45 HP); kiosks launch ballistic mortars with landing markers (120 HP). Death guards prevent repeated rewards. The Queen has 1500 HP, three phases, minion summons and invulnerable transitions. Screech telegraphs match their damage radii: 7/9/11 m with charge durations 1.4/1.1/0.9 s.
-
-### Verification (WP-5 and WP-7)
-
-The headless runner checks exit codes, script errors and failed results, with bounded per-test timeouts and persistent logs. Lifecycle/cleanup fixes repaired previously crashing tests. The end-to-end test drives fresh start, exact kill XP, level/stat spending, checkpoint save, death/respawn restoration, real rail entry, landing slam, boss phases/summons, victory, menu and Continue visibility. The ledger records three consecutive end-to-end passes. Its latest balance entry records a passing suite; WP-7 documents retained dummy-renderer/resource diagnostics and the legacy save-test skip. These are scripted gates, not proof of warning-free execution or a human audio/visual playtest.
-
-### Onboarding and Audio (WP-6)
-
-The pager is the voice of the game: `tutorial_director.gd` surfaces move/swing at spawn, then evade, tape, skates, grind and turret-reading hints as each becomes relevant. Music and SFX have their own buses (music -8 dB); tapes resume their position and crossfade on switch; cues exist for swing, hit, hurt, jump, land, evade, grind, pickup, kill, clack, level-up and pager. Merged and covered by `tests/test_onboarding.gd`. Nobody has yet listened to the mix; that is a playtest item.
+### Verification limits
+Headless suites verify scripted behaviour and material/node state; presentation was accepted from in-engine screenshots and two independent critiques; audio was accepted by the owner's VS1 playtest. The owner's VS1.1 playtest (see the ledger checklist) is the remaining gate.
 
 ---
 
@@ -66,26 +51,22 @@ The pager is the voice of the game: `tutorial_director.gd` surfaces move/swing a
 | Component | Specification |
 |---|---|
 | **Engine** | Godot Engine 4.3 Stable (Forward+ / 3D) |
-| **Core Architecture** | C++ godot-cpp GDExtension (`libbiopunk`) for player, combat, NPC; GDScript for enemy AI, level generation, HUD, projectiles |
-| **Perspective** | Fixed 45° Isometric 3D with camera-relative WASD movement |
+| **Core Architecture** | C++ godot-cpp GDExtension (`libbiopunk`) for the player, intro and menu controllers; GDScript for enemies, boss, level generation, HUD, saving, occlusion, warm-up, projectiles |
+| **Perspective** | Fixed 45° isometric camera, 12 m arm, FOV 45, camera-relative WASD |
 | **Player State Machine** | `STATE_NORMAL(0)`, `STATE_ATTACKING(1)`, `STATE_GRINDING(2)`, `STATE_AIRBORNE(3)`, `STATE_EVADING(4)`, `STATE_DEAD(5)` |
 | **Secondary Weapons** | `SECONDARY_NONE(0)`, `SECONDARY_SPRAY_FLAMETHROWER(1)`, `SECONDARY_DISK_LAUNCHER(2)` |
-| **Combat Hitbox** | `AttackSensor` (`Area3D`, radius = 2.2m) with strict spatial overlap filtering |
-| **Display** | 1920×1080, Windowed Fullscreen (borderless), canvas stretch expand |
-| **Platform Target** | PC (Windows x86_64; no Linux manifest entry) |
-| **Compiled Binary** | `bin/libbiopunk.windows.template_debug.x86_64.dll` |
-| **Input Actions** | WASD (move), Space (jump), LMB (attack), RMB/F (secondary), Q (cycle secondary), K (toggle skates), T (cycle tape), Shift/V (evade), C (character sheet), E (interact) |
+| **Combat Hitbox** | `AttackSensor` (`Area3D`, radius 2.2 m) |
+| **Display** | 1920×1080 fullscreen (borderless), FSR 1.0 at 0.75 scale, MSAA 2x, SSAO/glow/fog |
+| **Platform Target** | Windows x86_64 (release and debug GDExtension DLLs shipped) |
+| **Package** | `export_presets.cfg` presets "Windows Desktop" (release) and "Windows Desktop QA" |
+| **Input Actions** | WASD, Space, LMB, RMB/F, Q, K, T, Shift/V, C/Esc, E |
 
 ---
 
-## 5. What's Still Missing / Next Steps
+## 5. What's Next
 
-Mirror of the Director ledger's outstanding work and deferred scope:
+- **Owner playtest** of the VS1.1 package (ledger checklist).
+- **Post-VS1.1 polish** (not blockers): Queen HP / fight length, rails that connect areas, victory card art and key-press dismissal, Continue after victory, action-bar label size, floor material detail, stronger light pools.
+- **Phase 2 ideas (deferred by Director ruling):** tape splicing, new enemies/weapons/biomes, controller support, NPC dialogue, save slots, kill persistence.
 
-- Must fix before showing people: a human audio pass (all SFX are procedural 8-bit, verified only by signal tests; the music/SFX mix is a guess), a mouse-and-keyboard playtest in a real window (aim, skate turn feel, grind entry tolerance are tuned to numbers), and a decision on whether death should keep respawning the whole enemy roster.
-- Should fix: pillar fade when pillars occlude the player, 4.5 m north/west perimeter walls, placeholder roach/cicada silhouettes, camera occlusion at the mezzanine edge, no paused visual while the character sheet is open, dormant native NPC/enemy classes, Windows debug DLL only.
-- Open taste decisions for Anthony: camera distance (12 m vs 16 m), walk-vs-skate contrast, SFX character and mix, death respawn policy, roach pack size.
-- Deferred beyond Vertical Slice 1: new enemies, weapons and biomes; NPC/dialogue content; tape splicing; controller support. These are outside the slice's definition of done.
-- Existing dummy-renderer/teardown diagnostics and the legacy save-test skip remain verification limits recorded by WP-7; passing test gates do not assert warning-free output.
-
-*Updated October 7, 2026. Reflects Vertical Slice 1 as merged on `main` (all eight definition-of-done criteria, 19/19 headless suites).*
+*Updated October 8, 2026. Reflects Vertical Slice 1.1 as merged on `main` (23/23 headless suites, packaged build validated).*

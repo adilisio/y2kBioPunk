@@ -65,6 +65,8 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
   - `health_candy_pickup.gd`: Gusher-style bio-candy restoring 10 HP with sound chime.
   - `disk_projectile.gd` & `turret_mortar.gd`: Arcing and linear combat projectiles.
   - `isometric_camera.gd`: SpringArm3D follow, look-ahead and trauma shake; 12 m arm and 45-degree FOV, fixed isometric orientation. Camera collision is disabled for stable framing.
+  - `occlusion_fader.gd`: created by the builder at runtime; registers tall CSG boxes/cylinders and prop meshes with world AABBs, tests the camera->player segment each physics tick and fades occluders with per-instance `GeometryInstance3D.transparency` (target 0.7, hold 0.15 s, warm-up, restore on exit).
+  - `effect_warmup.gd`: `EffectWarmup` node in the mall scene; draws every combat shader variant through sub-pixel in-frustum probes and caches SFX recipes before the first fight, then frees itself.
 
 ---
 
@@ -81,8 +83,10 @@ y2k-biopunk-rpg/
 ├── SConstruct                  # SCons build script (enforces MSVC /MT flag)
 ├── project.godot               # Godot 4.3 project definition & input bindings
 │
-├── bin/                        # Compiled shared libraries
-│   └── libbiopunk.windows.template_debug.x86_64.dll
+├── export_presets.cfg          # "Windows Desktop" (release) and "Windows Desktop QA" presets
+├── bin/                        # Compiled shared libraries (both committed)
+│   ├── libbiopunk.windows.template_debug.x86_64.dll
+│   └── libbiopunk.windows.template_release.x86_64.dll
 │
 ├── godot-cpp/                  # Official C++ bindings submodule (branch 4.3)
 │
@@ -98,28 +102,29 @@ y2k-biopunk-rpg/
 │   ├── corrupted_kiosk_turret.gd
 │   ├── dial_up_queen.gd
 │   ├── disk_projectile.gd
+│   ├── effect_warmup.gd
 │   ├── enemy_model.gd
 │   ├── health_candy_pickup.gd
 │   ├── hud.gd
 │   ├── isometric_camera.gd
 │   ├── mall_greybox_builder.gd
 │   ├── neon_cicada.gd
+│   ├── occlusion_fader.gd
 │   ├── save_manager.gd
 │   ├── sludge_roach.gd
 │   ├── tutorial_director.gd
 │   └── turret_mortar.gd
 │
-├── scenes/                     # Godot scenes, 3D models, textures, animations
+├── scenes/                     # Godot scenes and the player model
 │   ├── FloodedMall_Greybox.tscn
-│   ├── intro.tscn
-│   ├── main_menu.tscn
-│   ├── neon_cicada.tscn
-│   ├── player.tscn
-│   └── Meshy_AI_biopunk_delinquent_*.glb
+│   ├── dial_up_queen.tscn / health_candy_pickup.tscn / neon_cicada.tscn / player.tscn
+│   ├── intro.tscn / main_menu.tscn
+│   └── Meshy_AI_biopunk_delinquent_te_All_Animations.glb (+ its 3 textures)
+├── build/                      # gitignored: release/, qa/ and the zip from build_release.ps1
 │
 ├── assets/models/              # Meshy-generated GLBs (enemies, boss, props) + their .import files
-├── music/                      # Cassette tape audio tracks
-├── sprites/                    # Spritesheets & 2D art
+├── music/                      # Cassette tape audio tracks (+ CREDITS.md)
+├── sprites/                    # menu_bg.jpg (menu background)
 |-- ops/                        # CONTEXT.md, DIRECTOR_LEDGER.md, briefs/, reports/, tools/, runs/; ops/secrets/ is gitignored
 `-- tests/                      # Headless SceneTree scripts; inventory below
 ```
@@ -162,11 +167,13 @@ powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1    # finds Godo
 
 The runner discovers `test_*.gd` and `verify_*.gd`, checks exit codes, script errors and failed results, enforces a timeout, and stores logs in `ops/runs/tests/`. `_test_util.gd` provides assertions, cleanup and isolated saves. Passing does not imply warning-free rendering or an audio playtest.
 
-Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_critical_path`, `test_cursor_aiming`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_menu_flow`, `test_onboarding`, `test_presentation`, `test_slice_e2e`, `test_systems`, `test_tapes`, and `verify_camera_and_hud` (all `.gd`).
+Current tests (23): `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_character_sheet`, `test_critical_path`, `test_cursor_aiming`, `test_effect_warmup`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_menu_flow`, `test_occlusion`, `test_onboarding`, `test_presentation`, `test_slice_e2e`, `test_systems`, `test_tapes`, `test_tune`, and `verify_camera_and_hud` (all `.gd`). Suites share the `user://` save: never run them from two checkouts at once.
+
+Release packaging: `powershell -NoProfile -ExecutionPolicy Bypass -File ops/tools/build_release.ps1` (rebuilds the release DLL when `src/` is newer, imports, exports both presets, writes `build/release/BUILD-INFO.txt`, zips to `build/Y2K-BioPunk-VS1.1-win64.zip`) then `ops/tools/smoke_packaged.ps1` (pck content proof, e2e + menu tests inside the QA pack, off-screen release launch). Needs the Godot 4.3 export templates in `%APPDATA%\Godot\export_templates\4.3.stable\`.
 
 `ops/tools/meshy/meshy_gen.py` generates textured GLBs from `manifest.json` via the Meshy Text-to-3D API (key from `MESHY_API_KEY` or gitignored `ops/secrets/meshy.key`; task ids cached under `ops/runs/meshy/` so reruns do not re-spend credits). After adding a GLB run `--import` headlessly, then `ops/tools/inspect_glb.gd -- res://assets/models/<name>.glb` for bounds and `ops/tools/check_enemy_models.gd` to confirm each enemy attaches its model and flashes. GLB imports use `gltf/embedded_image_handling=3` so textures stay inside the imported scene instead of being extracted as loose JPEGs.
 
-`ops/tools/shot_harness.gd` captures in-engine screenshots and scripted input with `scene=`, `out=` and `steps=` arguments after `--`. Steps include `wait`, `shot`, `press`, `hold`, `release`, `key` and `quit`. It requires rendered/windowed Godot and is Director/human tooling: agents must not run it windowed or claim headless screenshots prove presentation. `shot.ps1` is also windowed tooling. `sim_steer.gd`, `smoke_mall.gd` and `balance_table.gd` are diagnostics; `build_greybox.gd` is a scene generator, not a test.
+`ops/tools/shot_harness.gd` captures in-engine screenshots and scripted input with `scene=`, `out=` and `steps=` arguments after `--`. Steps include `wait`, `shot`, `press`, `hold`, `release`, `key`, `quit`, `tp:x:y:z`, `heal`, `invuln:0|1`, `dmg:<name>:<amount>`, `fps:<s>`, `profile:<s>`, `bench`, `firstuse` and shadow/effect A/B toggles. Launch with `--windowed --position 2000,2000`; the HUD skips its fullscreen switch when `--windowed` is present. It requires rendered/windowed Godot and is Director/human tooling: agents must not run it windowed or claim headless screenshots prove presentation. `shot.ps1` is also windowed tooling. `sim_steer.gd`, `smoke_mall.gd` and `balance_table.gd` are diagnostics; `build_greybox.gd` is a scene generator, not a test.
 
 `ops/tools/setup_worktree.ps1 -Name <packet> -Branch <branch> -From main` creates a worktree, copies local engine/bindings/DLL and imports headlessly. Use only when worktree creation is authorized; an assigned existing worktree must be retained.
 
@@ -201,11 +208,13 @@ Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_cr
 ### Session, Level and Boss Contracts
 - `SaveManager` is the persistent autoload. New Game calls `clear_save()` and clears load/respawn intent; Continue sets `pending_load`. HUD consumes this flag to restore checkpoint position, progression, stats and tape with full health.
 - Death sets `respawn_pending`; after reload the HUD restores the last Bio-Stabilizer save, then clears the flag. Ordinary level entry must not blindly apply a stale save. Respawn restores checkpoint progression, not an arbitrary dead snapshot.
-- `mark_slice_complete()` persists `slice_complete` on Queen defeat; the victory card returns to the menu.
+- `mark_slice_complete()` persists `slice_complete` on Queen defeat; on `boss_defeated` the HUD makes the player invincible, every `enemies` node is freed, the victory card appears after 1.2 s and the menu returns 6 s after defeat. Entering the arena saves progression as `ArenaGate` (respawn position stays the Bio-Stabilizer's); the Bio-Stabilizer heals to full and pages `PROGRESS SAVED`.
+- The character sheet (C; closed by C, Esc or the button) sets `get_tree().paused = true`; the HUD runs with `PROCESS_MODE_ALWAYS`, the pager timer does not advance while paused, the player's Walkman keeps playing, and the sheet cannot open while dead or during victory.
 - The boss gate is entry-triggered at z = -19, independent of clearing every enemy. `boss_encounter_trigger.gd` owns spawning; HUD owns boss display and victory flow.
 - `mall_greybox_builder.gd` rebuilds runtime geometry and encounters: it is the source of truth rather than stale baked `.tscn` geometry.
 - Onboarding and audio (WP-6, merged): `tutorial_director.gd` gates pager hints (move/swing, evade, tape, skates, grind, turret) on player state; the player creates `Music` and `SFX` buses at startup (music -8 dB), tapes resume their position and crossfade on switch, and cues fire for swing/hit/hurt/jump/land/evade/grind/pickup/kill/clack/level-up/pager. Covered by `tests/test_onboarding.gd`.
-- The dormant native `StrandedSoldierNPC` / `MutatedBugEnemy` classes and the HUD dialogue box were deleted on 2026-10-08; the native library now registers only the player, menu and intro controllers.
+- The dormant native `StrandedSoldierNPC` / `MutatedBugEnemy` classes and the HUD dialogue box were deleted on 2026-10-08; the native library registers only the player, menu and intro controllers. The menu has NEW GAME / CONTINUE / EXIT GAME only.
+- Telegraph colours: wind-ups amber `(1.0, 0.75, 0.2)`, hit flashes red, roach vulnerable window pale cyan, turret screen/light green->yellow->red, Queen ring red with a magenta-white pre-blast flash. Keep state tints at alpha ~0.3 so textures stay readable.
 
 ### Isometric Geometry & Movement
 - The isometric camera sits at a 45° angle.
@@ -236,7 +245,7 @@ When testing during development, if the Godot Editor or game instance is running
 | `toggle_skates` / `equip_skates` | `K` | Toggle roller skates (momentum, coast and carving) |
 | `switch_tape` | `T` | Cycle active Walkman mixtape |
 | `evade` | `Shift` / `V` | Power-slide dodge with invincibility frames |
-| `toggle_character_sheet` | `C` | Toggle character sheet modal |
+| `toggle_character_sheet` | `C` (Esc closes) | Toggle character sheet; pauses the game |
 | `interact` | `E` | Talk to NPCs / interact with world objects |
 
 
@@ -246,4 +255,5 @@ When testing during development, if the Godot Editor or game instance is running
 - Run Godot headlessly only; never open the editor or a windowed game from an agent. Close relevant game/editor instances before building to avoid DLL locks; do not kill other agents' processes.
 - Report actual commands, exit codes and pasted output. Distinguish verified behavior, estimates, warnings and unfinished work.
 - Commit before finishing when the packet/user requires it; that explicit instruction overrides CONTEXT's older Director-only commit policy.
+- Do not rewrite `project.godot` wholesale (an agent did and dropped settings), do not commit helper scripts you wrote for yourself, and do not hand-write `.import` files: run `--import` and let Godot generate them.
 - Do not commit generated `*.import` churn or run scene generators as tests.

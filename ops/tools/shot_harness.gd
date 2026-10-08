@@ -3,7 +3,7 @@ extends SceneTree
 ## Usage (windowed, NOT headless):
 ##   Godot_v4.3-stable_win64.exe --path . --windowed --resolution 1280x720 -s ops/tools/shot_harness.gd -- scene=res://scenes/FloodedMall_Greybox.tscn out=ops/runs/shots/greybox steps="wait:2,shot,hold:move_forward:1.5,shot,press:toggle_skates,hold:move_forward:2,shot,press:attack,wait:0.3,shot"
 ## Steps: wait:<s> | shot | press:<action> | hold:<action>:<s> | release:<action> | key:<keyname> | quit
-##        tp:<x>:<y>:<z> | heal | invuln:<0|1> | dmg:<name>:<amount> | fps:<s> | profile:<s> | plus A/B toggles (see match below)
+##        tp:<x>:<y>:<z> | heal | invuln:<0|1> | dmg:<name>:<amount> | fps:<s> | profile:<s> | firstuse | plus A/B toggles (see match below)
 ## Each 'shot' writes <out>.<n>.png. The harness quits at the end of the step list.
 
 var _out := "ops/runs/shots/shot"
@@ -147,6 +147,8 @@ func _run_steps() -> void:
 				await _profile_physics(float(parts[1]))
 			"bench":
 				await _bench_cue_path()
+			"firstuse":
+				await _first_use_effects()
 			"allareas":
 				var count := 0
 				for a in _all(current_scene):
@@ -390,6 +392,64 @@ func _bench_cue_path() -> void:
 		for k in results:
 			line += " | %s=%.2f ms" % [k, results[k]]
 		print(line)
+
+func _first_use_effects() -> void:
+	# For a cold attribution run, remove EffectWarmup from the scene before launch.
+	# CPU creation is timed separately from submission: shader work is deferred until
+	# a visible mesh draws. Full-frame intervals include the rest of the mall workload.
+	if DisplayServer.get_name() == "headless":
+		print("[FIRSTUSE] GPU diagnostic requires the off-screen windowed renderer")
+		return
+	var automatic_warmup := current_scene.get_node_or_null("EffectWarmup")
+	if automatic_warmup:
+		await automatic_warmup.tree_exited
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	var warmup = load("res://scripts/effect_warmup.gd").new()
+	warmup.auto_start = false
+	current_scene.add_child(warmup)
+	warmup.prepare(get_first_node_in_group("player") as Node3D)
+	var jobs: Array = warmup.make_jobs()
+	var lines: Array[String] = []
+	# Use a unique shader so this visibility check is independent of persistent
+	# driver caches. This artificial probe is not attribution to a gameplay effect.
+	var shader := Shader.new()
+	shader.code = "shader_type spatial; render_mode unshaded; void fragment() { ALBEDO = vec3(%.9f); }" % (0.1 + float(Time.get_ticks_usec() % 1000000) / 2000000.0)
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	var probe: MeshInstance3D = warmup._mesh(material)
+	probe.visible = false
+	var previous_mode := current_scene.process_mode
+	current_scene.process_mode = Node.PROCESS_MODE_DISABLED
+	for state in ["hidden", "first drawn", "drawn again"]:
+		await process_frame
+		probe.visible = state != "hidden"
+		var frame_max := 0.0
+		for frame in 3:
+			var start := Time.get_ticks_usec()
+			await RenderingServer.frame_post_draw
+			frame_max = maxf(frame_max, (Time.get_ticks_usec() - start) / 1000.0)
+			await process_frame
+		lines.append("[FIRSTUSE] unique shader %s draw_wait_max=%.3f ms draw_calls=%d" % [state, frame_max, Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)])
+	current_scene.process_mode = previous_mode
+	probe.queue_free()
+	for job in jobs:
+		for rep in 2:
+			await process_frame
+			var t0 := Time.get_ticks_usec()
+			(job.run as Callable).call()
+			var cpu_ms := (Time.get_ticks_usec() - t0) / 1000.0
+			var frame_max := 0.0
+			for frame in 3:
+				var start := Time.get_ticks_usec()
+				await RenderingServer.frame_post_draw
+				frame_max = maxf(frame_max, (Time.get_ticks_usec() - start) / 1000.0)
+				await process_frame
+			lines.append("[FIRSTUSE] %s rep=%d cpu=%.3f ms draw_wait_max=%.3f ms" % [job.label, rep, cpu_ms, frame_max])
+	# Buffer output so the ~3 ms stdout cost cannot contaminate the next probe.
+	for line in lines:
+		print(line)
+	warmup.queue_free()
+	await process_frame
 
 func _env() -> Environment:
 	for n in _all(current_scene):

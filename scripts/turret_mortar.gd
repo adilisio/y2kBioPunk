@@ -45,7 +45,7 @@ static func _synthesize(duration: float, frequency: float, noise: float) -> Audi
 	wav.data = data
 	return wav
 
-static func _burst_kit(color: Color) -> Dictionary:
+static func burst_kit(color: Color) -> Dictionary:
 	var key := color.to_html(false)
 	var kit = _burst_cache.get(key)
 	if kit:
@@ -86,7 +86,7 @@ static func burst(owner_node: Node3D, color: Color, count: int, duration: float 
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.lifetime = 0.45
-	var kit := _burst_kit(color)
+	var kit := burst_kit(color)
 	particles.process_material = kit["process"]
 	particles.draw_pass_1 = kit["mesh"]
 	effect.add_child(particles)

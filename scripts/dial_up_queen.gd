@@ -446,15 +446,16 @@ func _die() -> void:
 	current_state = State.DEFEATED
 	print("[DialUpQueen] *** BOSS DEFEATED! The dial-up carrier frequency has died. ***")
 	
-	if target_player and is_instance_valid(target_player) and target_player.has_method("gain_xp"):
-		target_player.call("gain_xp", 250)
-	
 	if get_tree():
 		for node in get_tree().get_nodes_in_group("enemies"):
-			if node.has_meta("summoned_by_boss") and node.get_meta("summoned_by_boss"):
-				node.queue_free()
-				
+			node.set_physics_process(false)
+			node.set_process(false)
+			node.queue_free()
+
+	# Start protection and pager suppression before awarding the Queen's XP.
 	emit_signal("boss_defeated")
+	if target_player and is_instance_valid(target_player) and target_player.has_method("gain_xp"):
+		target_player.call("gain_xp", 250)
 
 	# Dramatic shrink and explosion fade
 	if queen_body:

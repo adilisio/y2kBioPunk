@@ -134,11 +134,16 @@ func run() -> void:
 	p.global_position = Vector3(0, 1, 17)
 	p.velocity = Vector3.ZERO
 	var trigger = mall.get_node("BossEncounterTrigger")
+	sm.clear_save() # Arena entry must protect progression even without a previous save.
 	trigger._on_body_entered(p)
 	await frames(1)
 	if not check(get_nodes_in_group("boss").size() == 1, "f: real trigger spawns exactly one Queen"):
 		await finish()
 		return
+	check(sm.has_save_data() and sm.cached_save_data.get("checkpoint_id", "") == "ArenaGate", "f: arena entry saves progression as ArenaGate")
+	var saved_pos: Dictionary = sm.cached_save_data.get("checkpoint_position", {})
+	var respawn_pos := Vector3(saved_pos.get("x", 0), saved_pos.get("y", 0), saved_pos.get("z", 0))
+	check(respawn_pos.distance_to(get_first_node_in_group("checkpoints").global_position + get_first_node_in_group("checkpoints").respawn_offset) < 0.01, "f: arena save retains Bio-Stabilizer respawn position")
 	var queen = get_first_node_in_group("boss")
 	queen.boss_phase_transition.connect(func(phase): phases.append(phase))
 	queen.boss_defeated.connect(func(): defeated += 1)
@@ -161,11 +166,21 @@ func run() -> void:
 			summons.append(enemy)
 	queen.take_damage(999, Vector3.ZERO)
 	check(defeated == 1, "f: boss_defeated fires once")
+	check(p.get_is_invincible() and p.get_movement_locked(), "f: protection starts on boss_defeated")
+	var hud = mall.get_node("HUD")
+	check(hud.find_children("VictoryCard", "", true, false).is_empty(), "f: victory card waits for Queen death beat")
 	await frames(2)
 	var freed := not summons.is_empty()
 	for minion in summons:
 		freed = freed and not is_instance_valid(minion)
 	check(freed, "f: summoned minions freed on victory")
+	check(get_nodes_in_group("enemies").is_empty(), "f: every enemy freed on victory")
+	check(p.get_is_invincible() and p.get_movement_locked(), "f: victory player is invincible and locked")
+	var victory_hp: float = p.get_current_health()
+	p.take_damage(9999, Vector3.RIGHT)
+	check(is_equal_approx(p.get_current_health(), victory_hp), "f: lethal damage cannot interrupt victory")
+	check(mall.get_node("HUD").pager_messages.is_empty(), "f: Queen XP shows no level-up pages during victory")
+	await create_timer(1.25).timeout
 	var victory := false
 	for label in mall.get_node("HUD").find_children("*", "RichTextLabel", true, false):
 		if label.text.contains("SIGNAL RESTORED // MALL QUARANTINE LIFTED") and label.get_parent().get_parent() is PanelContainer:

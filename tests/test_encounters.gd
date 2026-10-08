@@ -102,7 +102,7 @@ func _run() -> void:
 	for phase in 3:
 		queen.current_phase = phase + 1
 		queen._enter_aoe_attack()
-		check(is_equal_approx(queen.state_timer, [1.4, 1.1, 0.9][phase]), "queen phase %d charge duration" % (phase + 1))
+		check(is_equal_approx(queen.state_timer, [1.4, 1.1, 1.05][phase]), "queen phase %d charge duration" % (phase + 1))
 		check(is_equal_approx(queen.aoe_outline.mesh.outer_radius, [7.0, 9.0, 11.0][phase]), "queen phase %d shows full radius immediately" % (phase + 1))
 	queen._execute_summon()
 	queen._execute_summon()

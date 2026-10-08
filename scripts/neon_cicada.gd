@@ -234,14 +234,10 @@ func _enter_windup(dir: Vector3) -> void:
 	velocity.x = 0.0
 	velocity.z = 0.0
 	if visual_mesh:
-		_flash_hit_visual()
+		_flash_hit_visual(true)
 		var cue := create_tween()
 		cue.tween_property(visual_mesh, "scale", Vector3(1.4, 0.8, 1.4), 0.25)
 		cue.tween_property(visual_mesh, "scale", Vector3.ONE, 0.25)
-		if flash_mat:
-			var pulse := create_tween()
-			pulse.tween_property(flash_mat, "emission_energy_multiplier", 0.9, 0.25)
-			pulse.tween_property(flash_mat, "emission_energy_multiplier", 0.45, 0.25)
 	print_verbose("[NeonDialUpCicada] wind-up (0.5s)")
 
 func _process_windup(delta: float) -> void:
@@ -284,10 +280,12 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		_die()
 
-func _flash_hit_visual() -> void:
+func _flash_hit_visual(is_state: bool = false) -> void:
 	if visual_mesh and is_instance_valid(visual_mesh):
 		# Translucent overlay keeps the model texture visible; low energy so ACES + glow does not blow it out to white.
-		flash_mat = EnemyModel.tint_material(Color(1.0, 0.12, 0.12), 0.55, 0.45)
+		var alpha = 0.3 if is_state else 0.55
+		var energy = 0.9 if is_state else 0.45
+		flash_mat = EnemyModel.tint_material(Color(1.0, 0.12, 0.12), alpha, energy)
 		EnemyModel.tint(visual_mesh, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():

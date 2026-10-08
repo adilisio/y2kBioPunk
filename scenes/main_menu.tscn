@@ -1,5 +1,24 @@
 [gd_scene format=3 uid="uid://b8x876fmenu01"]
 
+[ext_resource type="Script" path="res://sprites/load_menu_bg.gd" id="1_menu_bg"]
+
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_Btn"]
+bg_color = Color(0, 0, 0, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0, 1, 1, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_BtnHover"]
+bg_color = Color(0.2, 0.2, 0.2, 0.6)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.5, 1, 1, 1)
+
 [node name="MainMenu" type="MenuController"]
 layout_mode = 3
 anchors_preset = 15
@@ -8,14 +27,16 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="TextureRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.06, 0.08, 0.1, 1)
+expand_mode = 1
+stretch_mode = 6
+script = ExtResource("1_menu_bg")
 
 [node name="GridDecorTop" type="ColorRect" parent="."]
 layout_mode = 1
@@ -50,7 +71,7 @@ theme_override_colors/font_color = Color(0, 1, 0.8, 1)
 theme_override_colors/font_shadow_color = Color(0, 0.25, 0.2, 0.8)
 theme_override_constants/shadow_offset_x = 2
 theme_override_constants/shadow_offset_y = 3
-theme_override_font_sizes/font_size = 46
+theme_override_font_sizes/font_size = 72
 text = "Y2K: BIO-PUNK"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -67,7 +88,7 @@ offset_bottom = 180.0
 grow_horizontal = 2
 theme_override_colors/font_color = Color(0.85, 0.75, 0.3, 1)
 theme_override_font_sizes/font_size = 14
-text = "Y2K RETRO-FUTURE ISOMETRIC ARPG"
+text = "VERTICAL SLICE 1.1 // FLOODED MALL"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -91,19 +112,43 @@ alignment = 1
 custom_minimum_size = Vector2(260, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBoxFlat_Btn")
+theme_override_styles/hover = SubResource("StyleBoxFlat_BtnHover")
 text = "NEW GAME"
 
 [node name="LoadGameButton" type="Button" parent="VBoxContainer"]
 custom_minimum_size = Vector2(260, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBoxFlat_Btn")
+theme_override_styles/hover = SubResource("StyleBoxFlat_BtnHover")
 text = "CONTINUE"
 
 [node name="ExitButton" type="Button" parent="VBoxContainer"]
 custom_minimum_size = Vector2(260, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
+theme_override_styles/normal = SubResource("StyleBoxFlat_Btn")
+theme_override_styles/hover = SubResource("StyleBoxFlat_BtnHover")
 text = "EXIT GAME"
+
+[node name="HintLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -400.0
+offset_top = -65.0
+offset_right = 400.0
+offset_bottom = -40.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.8, 0.9, 1, 0.8)
+theme_override_font_sizes/font_size = 14
+text = "WASD move  ·  LMB swing  ·  SPACE jump  ·  K skates  ·  SHIFT evade  ·  T tape  ·  C stats"
+horizontal_alignment = 1
 
 [node name="FooterLabel" type="Label" parent="."]
 layout_mode = 1

@@ -29,9 +29,9 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
  │   - Melee AttackSensor    │                                   │ • Dial-Up Queen (Boss)    │
  │   - Secondary Weapons     │                                   │ • MallGreyboxBuilder      │
  │   - Walkman Tape Synergies│                                   │ • CRT Pager HUD (BBCode)  │
- │ • StrandedSoldierNPC      │                                   │ • Health Candy Pickups    │
- │ • IntroController         │                                   │ • Isometric Camera Rig    │
- │ • MenuController          │                                   │ • SaveManager Autoload    │
+ │ • IntroController         │                                   │ • Health Candy Pickups    │
+ │ • MenuController          │                                   │ • Isometric Camera Rig    │
+ │                           │                                   │ • SaveManager Autoload    │
  └───────────────────────────┘                                   └───────────────────────────┘
 ```
 
@@ -46,7 +46,6 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
   - Melee attack registration via `AttackSensor` (`Area3D`, 2.2m radius).
   - Secondary weapon arsenal: Aerosol Flamethrower (continuous tick + particles) and Disk Launcher.
   - Walkman Cassette tape engine modifying real-time effective stats (STR, AGI, VIT, VIBE).
-- **`StrandedSoldierNPC`**: Proximity interaction, dialogue trigger, Vibe skill check (DC 15).
 - **`IntroController` & `MenuController`**: Scene flow and menu transitions.
 - **`register_types.cpp`**: GDExtension initialization symbol `biopunk_library_init`.
 
@@ -89,10 +88,8 @@ y2k-biopunk-rpg/
 ├── src/                        # C++ GDExtension source code
 │   ├── intro_controller.cpp / .hpp
 │   ├── menu_controller.cpp / .hpp
-│   ├── mutated_bug_enemy.cpp / .hpp
 │   ├── player_controller.cpp / .hpp
-│   ├── register_types.cpp / .hpp
-│   └── stranded_soldier_npc.cpp / .hpp
+│   └── register_types.cpp / .hpp
 │
 ├── scripts/                    # GDScript gameplay logic
 │   ├── boss_encounter_trigger.gd
@@ -203,7 +200,7 @@ Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_cr
 - The boss gate is entry-triggered at z = -19, independent of clearing every enemy. `boss_encounter_trigger.gd` owns spawning; HUD owns boss display and victory flow.
 - `mall_greybox_builder.gd` rebuilds runtime geometry and encounters: it is the source of truth rather than stale baked `.tscn` geometry.
 - Onboarding and audio (WP-6, merged): `tutorial_director.gd` gates pager hints (move/swing, evade, tape, skates, grind, turret) on player state; the player creates `Music` and `SFX` buses at startup (music -8 dB), tapes resume their position and crossfade on switch, and cues fire for swing/hit/hurt/jump/land/evade/grind/pickup/kill/clack/level-up/pager. Covered by `tests/test_onboarding.gd`.
-- `StrandedSoldierNPC` and native `MutatedBugEnemy` remain registered but unused by the active slice.
+- The dormant native `StrandedSoldierNPC` / `MutatedBugEnemy` classes and the HUD dialogue box were deleted on 2026-10-08; the native library now registers only the player, menu and intro controllers.
 
 ### Isometric Geometry & Movement
 - The isometric camera sits at a 45° angle.

@@ -1,5 +1,4 @@
 #include "player_controller.hpp"
-#include "mutated_bug_enemy.hpp"
 
 #include <godot_cpp/classes/animation_player.hpp>
 #include <godot_cpp/classes/animation.hpp>
@@ -2689,11 +2688,6 @@ void PlayerController::execute_grind_slam(const Vector3 &p_direction) {
 			}
 			if (target->has_method("take_damage")) {
 				target->call("take_damage", static_cast<int>(slam_damage), knock_dir * 12.0f);
-			} else {
-				MutatedBugEnemy *bug = Object::cast_to<MutatedBugEnemy>(target);
-				if (bug) {
-					bug->take_damage(slam_damage);
-				}
 			}
 		}
 	}
@@ -2813,11 +2807,6 @@ void PlayerController::fire_spray_flamethrower() {
 					if (fire_dir.dot(dir) >= 0.5f) {
 						if (target_3d->has_method("take_damage")) {
 							target_3d->call("take_damage", static_cast<int>(flame_damage), fire_dir * 2.0f);
-						} else {
-							MutatedBugEnemy *bug = Object::cast_to<MutatedBugEnemy>(target_3d);
-							if (bug) {
-								bug->take_damage(flame_damage);
-							}
 						}
 					}
 				}

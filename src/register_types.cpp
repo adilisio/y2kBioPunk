@@ -6,8 +6,6 @@
 #include <godot_cpp/godot.hpp>
 
 #include "player_controller.hpp"
-#include "mutated_bug_enemy.hpp"
-#include "stranded_soldier_npc.hpp"
 #include "menu_controller.hpp"
 #include "intro_controller.hpp"
 
@@ -19,8 +17,6 @@ void initialize_biopunk_module(ModuleInitializationLevel p_level) {
 	}
 
 	GDREGISTER_CLASS(PlayerController);
-	GDREGISTER_CLASS(MutatedBugEnemy);
-	GDREGISTER_CLASS(StrandedSoldierNPC);
 	GDREGISTER_CLASS(MenuController);
 	GDREGISTER_CLASS(IntroController);
 }

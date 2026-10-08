@@ -43,14 +43,6 @@ var action_secondary_label: Label = null
 @onready var sheet_btn_vibe: Button = $HUDOverlay/CharacterSheet/Margin/VBox/VibeRow/BtnAddVibe
 @onready var sheet_btn_close: Button = $HUDOverlay/CharacterSheet/Margin/VBox/BtnCloseSheet
 
-# Dialogue Box Modal
-@onready var dialogue_box: PanelContainer = $HUDOverlay/DialogueBox
-@onready var speaker_label: Label = $HUDOverlay/DialogueBox/Margin/VBox/SpeakerLabel
-@onready var dialogue_body_label: Label = $HUDOverlay/DialogueBox/Margin/VBox/BodyLabel
-@onready var btn_standard_choice: Button = $HUDOverlay/DialogueBox/Margin/VBox/ChoicesVBox/BtnStandardChoice
-@onready var btn_vibe_choice: Button = $HUDOverlay/DialogueBox/Margin/VBox/ChoicesVBox/BtnVibeChoice
-@onready var btn_exit_choice: Button = $HUDOverlay/DialogueBox/Margin/VBox/ChoicesVBox/BtnExitChoice
-
 # Boss HP Bar UI
 var boss_container: PanelContainer = null
 var boss_hp_bar: ProgressBar = null
@@ -59,7 +51,6 @@ var boss_hp_num_label: Label = null
 var active_boss: Node = null
 
 var player: Node = null
-var soldier_npc: Area2D = null
 var anim_time: float = 0.0
 var reel_frames = ["|", "/", "-", "\\"]
 var reel_step: int = 0
@@ -347,11 +338,6 @@ func _ready() -> void:
 		if player.has_signal("player_died"):
 			player.connect("player_died", Callable(self, "_on_player_died"))
 
-	soldier_npc = get_node_or_null("../StrandedSoldierNPC") as Area2D
-	if soldier_npc:
-		if soldier_npc.has_signal("dialogue_opened"):
-			soldier_npc.connect("dialogue_opened", Callable(self, "_on_dialogue_opened"))
-
 	# Character Sheet Buttons
 	if sheet_btn_str:
 		sheet_btn_str.pressed.connect(Callable(self, "_on_spend_stat").bind("strength"))
@@ -363,14 +349,6 @@ func _ready() -> void:
 		sheet_btn_vibe.pressed.connect(Callable(self, "_on_spend_stat").bind("vibe"))
 	if sheet_btn_close:
 		sheet_btn_close.pressed.connect(Callable(self, "_on_close_sheet_pressed"))
-
-	# Dialogue Box Buttons
-	if btn_standard_choice:
-		btn_standard_choice.pressed.connect(Callable(self, "_on_standard_choice_pressed"))
-	if btn_vibe_choice:
-		btn_vibe_choice.pressed.connect(Callable(self, "_on_vibe_choice_pressed"))
-	if btn_exit_choice:
-		btn_exit_choice.pressed.connect(Callable(self, "_on_exit_dialogue_pressed"))
 
 	_setup_window_mode()
 	_setup_ui_layout()
@@ -696,72 +674,7 @@ func _refresh_character_sheet() -> void:
 	var base_vibe = player.call("get_vibe") if player.has_method("get_vibe") else 10
 	var eff_vibe = player.call("get_effective_vibe") if player.has_method("get_effective_vibe") else 10
 	if sheet_vibe_label:
-		sheet_vibe_label.text = "VIBE: %d (Effective: %d | Persuasion DC: 15)" % [base_vibe, eff_vibe]
-
-# --- Dialogue System Logic ---
-
-func _on_dialogue_opened(npc: Object) -> void:
-	if not dialogue_box:
-		return
-	dialogue_box.visible = true
-
-	var npc_name = "STRANDED SOLDIER"
-	if npc and npc.has_method("get_npc_name"):
-		npc_name = npc.call("get_npc_name").to_upper()
-	if speaker_label:
-		speaker_label.text = "RADIO COMM // %s" % npc_name
-
-	var already_persuaded = false
-	if npc and npc.has_method("get_already_persuaded"):
-		already_persuaded = npc.call("get_already_persuaded")
-
-	if already_persuaded:
-		if dialogue_body_label:
-			dialogue_body_label.text = "Sgt. Miller nods with calm relief:\n'Good to see you again, civilian. My squad's gone, but your words got through to me. I'm holding watch without shooting at shadows.'"
-		if btn_standard_choice:
-			btn_standard_choice.text = "[1] \"How are your supplies holding out?\""
-		if btn_vibe_choice:
-			btn_vibe_choice.text = "[2] [Vibe 15: COMPLETED] \"Hold down the fort, sergeant.\""
-			btn_vibe_choice.disabled = true
-	else:
-		if dialogue_body_label:
-			dialogue_body_label.text = "Hold your position! Biological warfare tore our division apart. Who goes there?!"
-		if btn_standard_choice:
-			btn_standard_choice.text = "[1] \"Who are you? What happened out here?\""
-		var current_vibe = player.call("get_effective_vibe") if player and player.has_method("get_effective_vibe") else 10
-		if btn_vibe_choice:
-			btn_vibe_choice.text = "[2] [Vibe 15 (Current: %d)] \"The war is over, man. Put the gun down.\"" % current_vibe
-			btn_vibe_choice.disabled = false
-
-func _on_standard_choice_pressed() -> void:
-	if not dialogue_body_label:
-		return
-	dialogue_body_label.text = "Miller lowers his weapon slightly:\n'Sgt. Miller, 4th Bio-Defense Division. A swarm of mutated beetles breached our defensive perimeter three nights ago. I'm the last one alive. High command hasn't replied to my distress beacon. If they're gone... what are we even defending?'"
-
-func _on_vibe_choice_pressed() -> void:
-	if not soldier_npc or not player or not dialogue_body_label:
-		return
-
-	var success = false
-	if soldier_npc.has_method("evaluate_vibe_check"):
-		success = soldier_npc.call("evaluate_vibe_check", player)
-
-	var eff_vibe = player.call("get_effective_vibe") if player.has_method("get_effective_vibe") else 10
-	var tape_name = player.get("current_tape") if player else "None"
-
-	if success:
-		dialogue_body_label.text = "[SUCCESS - VIBE CHECK PASSED (Effective Vibe: %d with Tape '%s')]\nMiller stares at you, his trembling hands dropping the rifle:\n'You're right... The radio's been dead static for weeks. We've been slaughtering bugs for a war that ended years ago. Take my rations and spare battery. I'm done shooting.'" % [eff_vibe, tape_name]
-		if btn_vibe_choice:
-			btn_vibe_choice.text = "[2] [Vibe 15: PASSED] \"Take care of yourself, sergeant.\""
-			btn_vibe_choice.disabled = true
-	else:
-		dialogue_body_label.text = "[FAILED - VIBE CHECK FAILED (Effective Vibe: %d / 15)]\nMiller snaps the rifle back up, his eyes wild with paranoia:\n'Don't try to mess with my head! Sector 4 stands until headquarters issues a formal ceasefire! One more step and I open fire!'" % eff_vibe
-
-func _on_exit_dialogue_pressed() -> void:
-	if dialogue_box:
-		dialogue_box.visible = false
-	if player and player.has_method("set_movement_locked"):
-		player.call("set_movement_locked", false)
+		sheet_vibe_label.text = "VIBE: %d (Effective: %d)" % [base_vibe, eff_vibe]
 
 # --- General HUD Refresh ---
 

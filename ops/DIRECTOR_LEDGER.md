@@ -69,7 +69,7 @@ Director-authored changes: camera arm 16â†’12 m / FOV 45; boss gate moved to z â
 5. Roach/cicada CSG silhouettes are placeholders (magenta capsule with wing planes). The wing planes read oddly from some angles.
 6. Camera has look-ahead but no occlusion handling; the mezzanine edge can hide the player briefly.
 7. The character sheet locks input but has no "paused" visual; enemies keep moving while it is open.
-8. The dormant C++ `StrandedSoldierNPC` / `MutatedBugEnemy` and the dialogue UI are unreferenced; delete or port to 3D in a later slice.
+8. ~~The dormant C++ `StrandedSoldierNPC` / `MutatedBugEnemy` and the dialogue UI are unreferenced.~~ Deleted 2026-10-08 on Anthony's ruling (C++ sources, registrations, HUD dialogue box + scene nodes, soldier block in `test_systems.gd`).
 9. Only a Windows debug DLL ships; no release build, no Linux manifest entry.
 10. README lost its feature overview in WP-8 (the old one was stale); worth a short, correct Features section later.
 

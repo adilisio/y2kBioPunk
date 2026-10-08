@@ -88,7 +88,7 @@ func run() -> void:
 	await frames(22)
 	check(player.try_evade(), "Evade should become available after cooldown")
 	player.set_movement_locked(true)
-	check(not player.get_is_invincible() and evade_ends == 2, "Dialogue lock must cancel evade cleanly")
+	check(not player.get_is_invincible() and evade_ends == 2, "Movement lock must cancel evade cleanly")
 	player.set_movement_locked(false)
 	player.player_hurt.connect(func(_amount): hurts += 1)
 	var hp: float = player.get_current_health()

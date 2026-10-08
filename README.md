@@ -6,7 +6,7 @@ Windows x86_64 is the supported platform for now. The extension manifest has no 
 
 ## Vertical Slice 1
 
-Start a fresh run in the Flooded Mall, fight telegraphed cicada lunges, roach pounces and kiosk mortars, earn XP and spend stat points. Skate, enter aligned grind rails and land a dismount slam; Bio-Stabilizers save checkpoint progression for death respawns and Continue. Entering the north arena awakens the three-phase Dial-Up Queen (1500 HP). Queen defeat shows a victory card, records completion and returns to the menu. The native soldier/dialogue system is dormant in this slice.
+Start a fresh run in the Flooded Mall, fight telegraphed cicada lunges, roach pounces and kiosk mortars, earn XP and spend stat points. Skate, enter aligned grind rails and land a dismount slam; Bio-Stabilizers save checkpoint progression for death respawns and Continue. Entering the north arena awakens the three-phase Dial-Up Queen (1500 HP). Queen defeat shows a victory card, records completion and returns to the menu.
 
 The pager teaches movement, swinging, evade, tapes, skates, grinding and turret reading as each becomes relevant. Music and SFX run on separate buses; tapes resume where they left off and crossfade when switched. All of this is merged on `main` and covered by the 19-suite headless test gate.
 

@@ -3172,69 +3172,6 @@ horizontal_alignment = 1
 layout_mode = 2
 text = "CLOSE"
 
-[node name="DialogueBox" type="PanelContainer" parent="HUD/HUDOverlay"]
-visible = false
-layout_mode = 1
-anchors_preset = 7
-anchor_left = 0.5
-anchor_top = 1.0
-anchor_right = 0.5
-anchor_bottom = 1.0
-offset_left = -380.0
-offset_top = -240.0
-offset_right = 380.0
-offset_bottom = -20.0
-grow_horizontal = 2
-grow_vertical = 0
-
-[node name="DialogueBg" type="ColorRect" parent="HUD/HUDOverlay/DialogueBox"]
-layout_mode = 2
-color = Color(0.04, 0.08, 0.06, 0.96)
-
-[node name="Margin" type="MarginContainer" parent="HUD/HUDOverlay/DialogueBox"]
-layout_mode = 2
-theme_override_constants/margin_left = 16
-theme_override_constants/margin_top = 12
-theme_override_constants/margin_right = 16
-theme_override_constants/margin_bottom = 12
-
-[node name="VBox" type="VBoxContainer" parent="HUD/HUDOverlay/DialogueBox/Margin"]
-layout_mode = 2
-theme_override_constants/separation = 8
-
-[node name="SpeakerLabel" type="Label" parent="HUD/HUDOverlay/DialogueBox/Margin/VBox"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0, 1, 0.65, 1)
-text = "RADIO COMM // SGT. MILLER (STRANDED SOLDIER)"
-
-[node name="BodyLabel" type="Label" parent="HUD/HUDOverlay/DialogueBox/Margin/VBox"]
-custom_minimum_size = Vector2(0, 50)
-layout_mode = 2
-text = "Hold your position! Biological warfare tore our division apart. Who goes there?!"
-autowrap_mode = 3
-
-[node name="HSeparator" type="HSeparator" parent="HUD/HUDOverlay/DialogueBox/Margin/VBox"]
-layout_mode = 2
-
-[node name="ChoicesVBox" type="VBoxContainer" parent="HUD/HUDOverlay/DialogueBox/Margin/VBox"]
-layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="BtnStandardChoice" type="Button" parent="HUD/HUDOverlay/DialogueBox/Margin/VBox/ChoicesVBox"]
-layout_mode = 2
-text = "[1] \"Who are you? What happened to your unit?\""
-alignment = 0
-
-[node name="BtnVibeChoice" type="Button" parent="HUD/HUDOverlay/DialogueBox/Margin/VBox/ChoicesVBox"]
-layout_mode = 2
-text = "[2] [Vibe 15] \"The war is over, man. Put the gun down.\""
-alignment = 0
-
-[node name="BtnExitChoice" type="Button" parent="HUD/HUDOverlay/DialogueBox/Margin/VBox/ChoicesVBox"]
-layout_mode = 2
-text = "[3] \"I'll leave you be. [End Transmission]\""
-alignment = 0
-
 [node name="LevelGeometry" type="Node3D" parent="."]
 
 [node name="MainFloor" type="CSGBox3D" parent="LevelGeometry"]

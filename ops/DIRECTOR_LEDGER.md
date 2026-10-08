@@ -5,7 +5,7 @@ Another strong agent can resume directorship from this file plus `ops/CONTEXT.md
 Reports: `ops/reports/` (audits, `WP-*` for VS1, `VS11-*` for VS1.1, `CRITIC-*` for the independent critiques). Briefs: `ops/briefs/`.
 Gate: `powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1` (23 suites, all PASS at HEAD).
 
-## VS1.1 — Showable build (status: complete except the owner playtest)
+## VS1.1 — Showable build (status: accepted by the owner 2026-10-08; owner-feedback round in progress)
 
 Milestone artifact: `build/Y2K-BioPunk-VS1.1-win64.zip` (244 MB) produced by `ops/tools/build_release.ps1` from main at `38f59ba`+docs; contents `build/release/` = `Y2K-BioPunk.exe` (84 MB release template), `Y2K-BioPunk.pck` (224 MB, 100 entries, no ops/tests/src/godot-cpp files), `libbiopunk.windows.template_release.x86_64.dll`, `Y2K-BioPunk.console.exe` (log-capturing launcher), `BUILD-INFO.txt`, `MUSIC-CREDITS.txt`. A second preset builds `build/qa/` (debug template, includes `tests/` and the shot harness) for packaged verification. Saves land in `%APPDATA%\Godot\app_userdata\Y2K- Bio-Punk\`.
 
@@ -25,7 +25,7 @@ Milestone artifact: `build/Y2K-BioPunk-VS1.1-win64.zip` (244 MB) produced by `op
 | 14 | No missing assets/errors in package | Smoke filter PASS; pck proof in `ops/reports/VS11-EXPORT.md` |
 | 15-16 | Full run reaches/defeats Queen, victory → menu | e2e inside the pack; victory flow re-shot `ops/runs/shots/vs11/tune_grid.png` |
 | 17 | Two independent critics triaged | `CRITIC-VISUAL-BASELINE-VS11.md`, `CRITIC-GAMEPLAY-VS11.md` (Opus), `CRITIC-VISUAL-ROUND2-VS11.md`; triage below |
-| 18 | Owner playtest | **PENDING** — checklist in the handoff message / bottom of this file |
+| 18 | Owner playtest | **Done 2026-10-08**: would hand it to a stranger; four follow-ups (turret identity, Queen motion, stats legibility/leveling, big-fight stall) — see Owner playtest section |
 | 19 | Docs match reality | This file, README, GAME_SYNOPSIS, AGENTS, CONTEXT updated 2026-10-08 |
 | 20 | Remaining problems classified | Section "Remaining issues" below |
 
@@ -65,15 +65,16 @@ VS1.1 added ~0.4 ms GPU over the VS1 baseline (7.3 ms). Lessons that still hold:
 - **Phase 2:** tape splicing, new enemies/weapons/biomes, controller support, NPC dialogue, save slots, kill persistence (owner rejected for the slice).
 - **Rejected:** see triage.
 
-### Owner checklist (Anthony, taste only — answers are final)
-1. Do the new enemies and the Queen look good in actual play, not just in screenshots?
-2. Is the player ever hard to see (pillars, mezzanine edge, arena)?
-3. Does the mall now feel like one place (signs, arena, checkpoint), or still a greybox with stickers?
-4. Does the Queen fight look and feel like a boss, and is the phase-3 screech dodgeable?
-5. Did anything still scream "prototype" (HUD, menu, victory card, sounds)?
-6. Did you notice any stutter or hitch, especially in the first fight?
-7. Did any pager hint annoy, confuse, or arrive too late?
-8. Would you hand `build/Y2K-BioPunk-VS1.1-win64.zip` to a stranger as is?
+### Owner playtest (Anthony, 2026-10-08 ~15:15, the VS1.1 package) — answers are final
+1. Enemies look good; the Queen and bugs look good. **But turrets are hard to distinguish from the food carts**, and **the Queen doesn't move much**.
+2. Player visibility: no complaint.
+3. "The mall feels better than ever. More styling really helps it shine."
+4. "The Queen feels like a boss. She is hard to beat but her slam can be dodged."
+5. "The animations in general still feel a little prototype-like." Pager hints: liked.
+6. "Still some stutters when I play, but might be my machine, especially when fighting a lot of enemies." → Director reproduced a **560 ms** frame at the first Queen summon: `EnemyModel.attach` dropped the loaded GLB `PackedScene` after instancing, so every summon/respawn re-read the 21 MB roach scene and re-uploaded textures. Fixed on main (static scene cache in `enemy_model.gd` + summon tone added to the warm-up); re-measured phase-2 fight with summons: worst frame 12.5 ms over 20 s.
+7. (covered by 5)
+8. **"I would give it off to a stranger to play."** → VS1.1 accepted.
+Additional ruling: **stats are not legible.** "Bat swing dmg" but the character punches; "what are vibes? no one knows"; leveling doesn't feel stronger; "you can easily gain 5+ levels just in this fight" (summons farm XP). → Follow-up packets VS11-STATS (bat prop in hand, per-point effects ×1.6, VIBE = crit chance, sheet explains each stat, summons give 0 XP, Queen 120 XP, "STRIKE DMG") and VS11-IDENTITY (turret beacon/hazard ring/bigger screen/idle scan, Queen figure-8 drift + bob + charge rise + summon spin, roach scuttle and cicada flutter).
 
 ## VS1 history (2026-10-07, condensed)
 Experience and DoD: New Game → flooded mall → telegraphed cicadas/roaches/turrets → XP/levels/character sheet → Bio-Stabilizer → death/respawn with progression → skate/rail/slam → three-phase Dial-Up Queen → victory card → menu → Continue. Packets WP-1..8 (audits by Codex/Gemini/Opus; critical path, feel core, presentation, encounters, test harness, onboarding/audio, e2e + balance, docs) all merged; details in `ops/reports/WP-*.md`.

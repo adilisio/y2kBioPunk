@@ -12,10 +12,26 @@ extends RefCounted
 ## and state colours; it works on CSG placeholders too.
 
 
-static func attach(parent: Node, path: String, fit_height: float, ground_y: float = 0.0, yaw_degrees: float = 0.0, pitch_degrees: float = 0.0, node_name: String = "Model") -> Node3D:
+## Loaded GLB scenes are kept alive here. Without this, `load()` drops the PackedScene (and its
+## embedded textures) as soon as the last instance is spawned, so every Queen summon or enemy
+## respawn re-read the 20 MB .scn from disk and re-uploaded its textures: a measured 560 ms stall.
+static var _scene_cache: Dictionary = {}
+
+static func packed_scene(path: String) -> PackedScene:
+	var cached = _scene_cache.get(path)
+	if cached:
+		return cached
 	if path.is_empty() or not ResourceLoader.exists(path):
 		return null
 	var packed := load(path) as PackedScene
+	if packed:
+		_scene_cache[path] = packed
+	return packed
+
+static func attach(parent: Node, path: String, fit_height: float, ground_y: float = 0.0, yaw_degrees: float = 0.0, pitch_degrees: float = 0.0, node_name: String = "Model") -> Node3D:
+	if path.is_empty() or not ResourceLoader.exists(path):
+		return null
+	var packed := packed_scene(path)
 	if packed == null:
 		push_warning("EnemyModel: %s is not a PackedScene" % path)
 		return null

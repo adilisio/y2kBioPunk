@@ -18,6 +18,7 @@ const SOUND_RECIPES := [
 	Vector3(0.35, 500, 0), Vector3(0.35, 1000, 0), # turret tracking/charge
 	Vector3(0.18, 90, 0.4), # mortar launch
 	Vector3(0.8, 1600, 0.35), # Queen charge
+	Vector3(1.5, 950, 0.55), # Queen summon handshake
 	Vector3(0.25, 700, 0.65), Vector3(0.25, 90, 0.65), # cicada/roach death
 	Vector3(0.25, 80, 0.65), Vector3(0.25, 65, 0.65), # turret death/splash
 	Vector3(0.35, 45, 0.65), Vector3(0.25, 60, 0.65), # Queen blast/death

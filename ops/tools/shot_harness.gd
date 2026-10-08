@@ -103,6 +103,20 @@ func _run_steps() -> void:
 						hit += 1
 				print("[HARNESS] dmg:%s:%s hit %d" % [parts[1], parts[2], hit])
 				await process_frame
+			"shadowatlas":
+				RenderingServer.directional_shadow_atlas_set_size(int(parts[1]), true)
+				await process_frame
+			"shadowdist", "shadowblur", "shadowsplits":
+				for n in _all(current_scene):
+					if n is DirectionalLight3D:
+						var l := n as DirectionalLight3D
+						if parts[0] == "shadowdist":
+							l.directional_shadow_max_distance = float(parts[1])
+						elif parts[0] == "shadowblur":
+							l.shadow_blur = float(parts[1])
+						else:
+							l.directional_shadow_mode = int(parts[1]) as DirectionalLight3D.ShadowMode
+				await process_frame
 			"fps":
 				await _measure_fps(float(parts[1]))
 			"cap":

@@ -42,19 +42,33 @@ func _ready() -> void:
 
 func _begin() -> void:
 	# Child _ready runs before the mall builder's _ready. Wait for the completed build.
-	await get_tree().process_frame
+	# Every await re-checks that the scene still exists: a fast scene change (menu tests, death
+	# reload) can free the mall mid-coroutine, and touching freed nodes afterwards raised script errors.
+	var tree := get_tree()
+	if tree == null:
+		return
+	await tree.process_frame
+	if not is_inside_tree():
+		return
 	prepare(get_tree().get_first_node_in_group("player") as Node3D)
 	var jobs := make_jobs()
 	var slice_start := Time.get_ticks_usec()
 	for job in jobs:
+		if not is_inside_tree():
+			return
 		(job.run as Callable).call()
 		if Time.get_ticks_usec() - slice_start >= SCRIPT_BUDGET_USEC:
-			await get_tree().process_frame
+			await tree.process_frame
+			if not is_inside_tree():
+				return
 			slice_start = Time.get_ticks_usec()
 	# Keep every probe alive through two render submissions (also works with Dummy).
-	await get_tree().process_frame
-	await get_tree().process_frame
-	queue_free()
+	await tree.process_frame
+	if not is_inside_tree():
+		return
+	await tree.process_frame
+	if is_inside_tree():
+		queue_free()
 
 func prepare(player: Node3D) -> void:
 	_player = player

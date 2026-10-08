@@ -1275,7 +1275,18 @@ float PlayerController::get_effective_bat_damage() const {
 }
 
 float PlayerController::get_critical_chance() const {
+	if (critical_chance_override >= 0.0f) {
+		return Math::clamp(critical_chance_override, 0.0f, 1.0f);
+	}
 	return Math::clamp(static_cast<float>(get_effective_vibe()) * 0.02f, 0.0f, 1.0f);
+}
+
+float PlayerController::get_critical_chance_override() const {
+	return critical_chance_override;
+}
+
+void PlayerController::set_critical_chance_override(float p_value) {
+	critical_chance_override = p_value;
 }
 
 float PlayerController::get_disk_damage() const {
@@ -3070,6 +3081,9 @@ void PlayerController::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("attack"), &PlayerController::attack);
 	ClassDB::bind_method(D_METHOD("get_effective_bat_damage"), &PlayerController::get_effective_bat_damage);
 	ClassDB::bind_method(D_METHOD("get_critical_chance"), &PlayerController::get_critical_chance);
+	ClassDB::bind_method(D_METHOD("get_critical_chance_override"), &PlayerController::get_critical_chance_override);
+	ClassDB::bind_method(D_METHOD("set_critical_chance_override", "value"), &PlayerController::set_critical_chance_override);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "critical_chance_override"), "set_critical_chance_override", "get_critical_chance_override");
 	ClassDB::bind_method(D_METHOD("get_disk_damage"), &PlayerController::get_disk_damage);
 	ClassDB::bind_method(D_METHOD("take_damage", "amount", "knockback"), &PlayerController::take_damage, DEFVAL(Vector3()));
 	ClassDB::bind_method(D_METHOD("heal", "amount"), &PlayerController::heal);

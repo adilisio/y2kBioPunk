@@ -57,6 +57,7 @@ func run() -> void:
 	var front := target_at(player.global_position + Vector3(0, 0, 1.6))
 	var back := target_at(player.global_position + Vector3(0, 0, -1.6))
 	await frames(2)
+	player.set_critical_chance_override(0.0) # VIBE crits are random; this test checks the base combo
 	player.get_attack_sensor().position = Vector3(0, 0.5, -1.2)
 	check((player.get_attack_sensor().collision_mask & 1) == 0, "Melee must exclude world layer")
 	player.attack()
@@ -71,11 +72,12 @@ func run() -> void:
 	player.attack() # Buffer third punch.
 	await create_timer(0.50).timeout
 	print("FEEL combo_damages=", front.damages, " impulses=", front.impulses)
-	check(front.damages == [40, 40, 60], "Three-hit combo must deliver base/base/1.5x damage")
+	var base_dmg := int(player.get_effective_bat_damage())
+	check(front.damages == [base_dmg, base_dmg, int(base_dmg * 1.5)], "Three-hit combo must deliver base/base/1.5x damage (base %d)" % base_dmg)
 	check(front.impulses.size() == 3 and is_equal_approx(front.impulses[2].length(), 1.5), "Third punch must increase knockback 1.5x")
 	check(not player.get_is_attacking(), "Combo must release attack state")
 	check(is_equal_approx(Engine.time_scale, 1), "Hit-stop must restore time scale")
-	check(is_equal_approx(player.get_effective_bat_damage(), 40), "Bound damage getter must match native combo")
+	check(is_equal_approx(player.get_effective_bat_damage(), 15.0 + 4.0 * player.get_effective_strength()), "Bound damage getter must match native combo (15 + 4*STR)")
 	player.evade_ended.connect(func(): evade_ends += 1)
 	check(player.try_evade(), "Evade should begin")
 	player.attack()

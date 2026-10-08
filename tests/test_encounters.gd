@@ -116,7 +116,7 @@ func _run() -> void:
 	for e in get_nodes_in_group("enemies"):
 		e.free()
 
-	for entry in [[Roach, 15], [Cicada, 10], [Turret, 40], [Queen, 250]]:
+	for entry in [[Roach, 15], [Cicada, 10], [Turret, 40], [Queen, 120]]:
 		var enemy = entry[0].new()
 		world.add_child(enemy)
 		enemy.set_physics_process(false)

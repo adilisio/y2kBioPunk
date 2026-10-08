@@ -145,6 +145,7 @@ private:
 	Array skin_overlays;
 	Ref<StandardMaterial3D> hurt_overlay;
 	float base_attack_damage = 15.0f;
+	float critical_chance_override = -1.0f;
 	float attack_reach = 2.5f;
 	bool is_attacking = false;
 	bool attack_key_was_pressed = false;
@@ -264,6 +265,9 @@ public:
 	// A melee strike rolls once: crit damage x1.75 (then integer damage interface),
 	// hit-stop +0.04 seconds and a cached synthesized crit_pop cue.
 	float get_critical_chance() const;
+	// Tests set this (0..1) to make strikes deterministic; -1 = use the VIBE formula.
+	float get_critical_chance_override() const;
+	void set_critical_chance_override(float p_value);
 	float get_disk_damage() const;
 	void take_damage(float p_amount, const Vector3 &p_knockback = Vector3());
 	void heal(float p_amount);

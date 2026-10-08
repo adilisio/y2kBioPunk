@@ -6,6 +6,9 @@ extends Node3D
 ## Can be triggered from the Godot Editor Inspector via the 'rebuild_level' button,
 ## or executed at runtime when the scene loads.
 
+const OcclusionFader = preload("res://scripts/occlusion_fader.gd")
+var occlusion_fader: Node
+
 @export_category("Level Generator")
 @export var auto_build_on_ready: bool = false
 @export var cicada_scene: PackedScene
@@ -43,8 +46,9 @@ func _ready() -> void:
 		_connect_runtime_rails()
 
 	if not Engine.is_editor_hint():
-		set_process(true)
-		var p = get_node_or_null("../Player")
+		var p = get_node_or_null("Player")
+		if not p:
+			p = get_node_or_null("../Player")
 		if not p:
 			p = get_tree().current_scene.find_child("Player", true, false) if get_tree() and get_tree().current_scene else null
 		if p:
@@ -61,47 +65,14 @@ func _ready() -> void:
 				tut.set_script(tut_script)
 				add_child(tut)
 
-func _process(delta: float) -> void:
-	if Engine.is_editor_hint():
-		return
-	var players = get_tree().get_nodes_in_group("player")
-	if players.is_empty(): return
-	var p = players[0]
-	var cam = get_viewport().get_camera_3d()
-	if not cam: return
-	
-	var cam_pos = cam.global_position
-	var p_pos = p.global_position + Vector3(0, 1.0, 0)
-	var dir = p_pos - cam_pos
-	var dist = cam_pos.distance_to(p_pos)
-	var dir_norm = dir / dist
-	
-	var pillars = get_node_or_null("LevelGeometry/StructuralPillars")
-	if not pillars: return
-	
-	for pillar in pillars.get_children():
-		if pillar is CSGCylinder3D:
-			var mat = pillar.material as StandardMaterial3D
-			if not mat: continue
-			
-			var center = pillar.global_position
-			var to_center = center - cam_pos
-			var t = to_center.dot(dir_norm)
-			var fade = false
-			if t > 0.0 and t < dist:
-				var proj = cam_pos + dir_norm * t
-				var dist_to_line = proj.distance_to(Vector3(center.x, clampf(proj.y, center.y - pillar.height*0.5, center.y + pillar.height*0.5), center.z))
-				if dist_to_line < pillar.radius + 1.0:
-					fade = true
-			
-			if fade:
-				mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-				mat.albedo_color.a = 0.25
-			else:
-				mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
-				mat.albedo_color.a = 1.0
-
 func _clear_existing_geometry() -> void:
+	if is_instance_valid(occlusion_fader):
+		occlusion_fader.restore_all()
+		if occlusion_fader.get_parent() == self:
+			remove_child(occlusion_fader)
+		occlusion_fader.queue_free()
+	occlusion_fader = null
+
 	var existing = get_node_or_null("LevelGeometry")
 	if existing:
 		# Detach immediately so the rebuilt node can reuse the name; free safely afterwards.
@@ -121,6 +92,11 @@ func _clear_existing_geometry() -> void:
 
 func build_mall_greybox() -> void:
 	_clear_existing_geometry()
+	# Offline tooling builds geometry only; _ready rebuilds with runtime systems.
+	if not Engine.is_editor_hint() and is_inside_tree():
+		occlusion_fader = OcclusionFader.new()
+		occlusion_fader.name = "OcclusionFader"
+		add_child(occlusion_fader)
 
 	var level_root = Node3D.new()
 	level_root.name = "LevelGeometry"
@@ -293,6 +269,9 @@ func build_mall_greybox() -> void:
 	# 10. Spawn Enemy Prototypes
 	_spawn_enemies(enemies_root)
 
+	if is_instance_valid(occlusion_fader):
+		occlusion_fader.finish_build()
+
 	print("[FloodedMall] Greybox blockout successfully constructed with %d structural sections!" % level_root.get_child_count())
 
 func _spawn_enemies(enemies_container: Node3D = null) -> void:
@@ -412,6 +391,11 @@ func _add_prop(parent: Node, node_name: String, model_path: String, size: Vector
 		root.owner = scene_owner
 		body.owner = scene_owner
 		shape.owner = scene_owner
+	if size.y > 1.2 and is_instance_valid(occlusion_fader):
+		# EnemyModel.bounds(root) includes root placement/scale in its parent space.
+		var prop_bounds := EnemyModel.bounds(root)
+		for mesh in EnemyModel.mesh_instances(root):
+			occlusion_fader.register_occluder(mesh, parent, prop_bounds)
 	return root
 
 func _add_prop_or_box(parent: Node, node_name: String, model_path: String, size: Vector3, pos: Vector3, mat: StandardMaterial3D, stretch_footprint: bool = false, yaw_degrees: float = 0.0) -> Node3D:
@@ -433,6 +417,9 @@ func _add_box(parent: Node, node_name: String, size: Vector3, pos: Vector3, mat:
 	_add_static_body(box, shape)
 	if Engine.is_editor_hint():
 		box.owner = get_tree().edited_scene_root if get_tree() else self
+	# Elevated deck/guards can occlude despite their individual height being <= 1.2 m.
+	if (size.y > 1.2 or node_name == "DeckFloor" or node_name.begins_with("DeckRail_")) and is_instance_valid(occlusion_fader):
+		occlusion_fader.register_occluder(box, box, AABB(-size * 0.5, size))
 	return box
 
 func _add_cylinder(parent: Node, node_name: String, radius: float, height: float, pos: Vector3, mat: StandardMaterial3D) -> CSGCylinder3D:
@@ -451,6 +438,9 @@ func _add_cylinder(parent: Node, node_name: String, radius: float, height: float
 	_add_static_body(cyl, shape)
 	if Engine.is_editor_hint():
 		cyl.owner = get_tree().edited_scene_root if get_tree() else self
+	if height > 1.2 and is_instance_valid(occlusion_fader):
+		var bounds_size := Vector3(radius * 2.0, height, radius * 2.0)
+		occlusion_fader.register_occluder(cyl, cyl, AABB(-bounds_size * 0.5, bounds_size))
 	return cyl
 
 ## Primitive-shape StaticBody3D parented to a CSG visual so it follows the visual's transform (ramps rotate after creation).

@@ -60,9 +60,9 @@ Director-authored changes: camera arm 16→12 m / FOV 45; boss gate moved to z �
 ## Remaining issues
 
 **Must fix before showing people**
-1. Nobody has *listened* to the game. All SFX are procedural 8-bit and were verified only by encoding/signal tests. Expect some cues to be harsh; the mix (Music −8 dB vs SFX 0 dB) is a guess.
-2. Nobody has played with a mouse and keyboard in a real window. Cursor-aim + movement direction, the skate turn feel, and grind entry tolerance are tuned to numbers, not hands.
-3. Death respawns the entire enemy roster (by design for now). If Anthony finds re-fighting the plaza tedious, persist kills in the save.
+1. ~~Nobody has *listened* to the game.~~ Resolved 2026-10-08: Anthony played with mouse+keyboard and reports the SFX "sound great"; mix (Music −8 dB vs SFX 0 dB) stands.
+2. ~~Nobody has played with a mouse and keyboard in a real window.~~ Resolved 2026-10-08 by Anthony's playtest (see decisions below). No feel complaints raised.
+3. Death respawns the entire enemy roster. Anthony ruled 2026-10-08: keep it; re-fighting is fine. Do not build kill persistence for this slice.
 
 **Should fix later**
 4. Pillar fade when they occlude the player (WP-3 brief item; not verified in shots). North/west perimeter walls are still 4.5 m.
@@ -77,7 +77,12 @@ Director-authored changes: camera arm 16→12 m / FOV 45; boss gate moved to z �
 - Tape splicing, new enemies/weapons/biomes, controller support, NPC dialogue in 3D, save slots.
 
 ## Anthony decisions (taste only)
-See the playtest checklist in the final report. Candidates: camera distance (12 m vs 16 m), walk speed vs skate contrast, SFX character/mix, whether death should respawn enemies, roach pack size.
+Playtest done 2026-10-08 (mouse+keyboard, ~10 min). All five checklist items ruled **keep as is**:
+1. Camera 12 m / FOV 45: keep. "I can see what I want to see." Do not return to the 16 m overview.
+2. Walk vs skate: keep both. Walking (6 m/s + AGI) is quick enough to compete; skating (12 m/s) reads as slipping around for speed. Do not make skates default or narrow the gap.
+3. SFX: keep. Cues "sound great"; Music −8 dB is not too quiet.
+4. Death respawns enemies: keep. Re-fighting the plaza is fine; kill persistence stays out of scope.
+5. Roach pack cap of 2 simultaneous attackers: keep. "Not annoying, makes it interesting."
 
 ## Machine-state changes made by the Director
 - 2026-10-07 15:48: `HKCU\Software\Microsoft\Windows\Windows Error Reporting\DontShowUI = 1` (was unset) so Godot crash-at-exit dialogs from headless tests stop popping. Revert with `Remove-ItemProperty` if unwanted.

@@ -1,6 +1,6 @@
-[gd_scene format=3 uid="uid://b8x876fmenu01"]
+[gd_scene load_steps=4 format=3 uid="uid://b8x876fmenu01"]
 
-[ext_resource type="Script" path="res://sprites/load_menu_bg.gd" id="1_menu_bg"]
+[ext_resource type="Texture2D" uid="uid://b0100dfuq17gn" path="res://sprites/menu_bg.jpg" id="1_menu_bg"]
 
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_Btn"]
@@ -36,7 +36,7 @@ grow_horizontal = 2
 grow_vertical = 2
 expand_mode = 1
 stretch_mode = 6
-script = ExtResource("1_menu_bg")
+texture = ExtResource("1_menu_bg")
 
 [node name="GridDecorTop" type="ColorRect" parent="."]
 layout_mode = 1

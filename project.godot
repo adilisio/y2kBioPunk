@@ -13,8 +13,9 @@ config_version=5
 config/name="Y2K: Bio-Punk"
 config/description="A retro-future Y2K Bio-Punk Isometric ARPG built with Godot 4.3 and C++ GDExtension."
 run/main_scene="res://scenes/intro.tscn"
-config/features=PackedStringArray("4.3", "Forward Plus")
+run/flush_stdout_on_print=false
 run/flush_stdout_on_print.debug=false
+config/features=PackedStringArray("4.3", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
@@ -131,12 +132,13 @@ secondary_fire={
 
 [rendering]
 
-textures/canvas_textures/default_texture_filter=0
+lights_and_shadows/directional_shadow/size=4096
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=1
+lights_and_shadows/positional_shadow/atlas_size=2048
 lights_and_shadows/positional_shadow/soft_shadow_filter_quality=1
 environment/ssao/quality=0
+environment/glow/upscale_mode=0
 scaling_3d/mode=1
 scaling_3d/scale=0.75
-environment/glow/upscale_mode=0
 anti_aliasing/quality/msaa_3d=1
-lights_and_shadows/positional_shadow/atlas_size=2048
+textures/canvas_textures/default_texture_filter=0

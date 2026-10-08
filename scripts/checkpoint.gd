@@ -56,7 +56,7 @@ func _build_visuals() -> void:
 	lbl.name = "Label"
 	lbl.text = "BIO-STABILIZER"
 	lbl.position = Vector3(0.0, 1.3, 0.0)
-	lbl.pixel_size = 0.015
+	lbl.pixel_size = 0.006
 	lbl.modulate = Color.CYAN
 	lbl.outline_modulate = Color.BLACK
 	lbl.outline_size = 4

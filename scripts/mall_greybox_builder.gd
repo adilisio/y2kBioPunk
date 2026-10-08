@@ -193,7 +193,7 @@ func build_mall_greybox() -> void:
 
 	# Mezzanine prop & sign
 	_add_prop_or_box(mezz_parent, "Planter_Mezzanine", "res://assets/models/mall_planter.glb", Vector3(4.0, low_wall_height, 2.0), Vector3(-17.0, 1.2 + low_wall_height * 0.5, -6.0), mat_low_wall, true, 0.0)
-	var lbl_food = _add_label3d(mezz_parent, "Sign_FoodCourt", "FOOD COURT ->", Vector3(-18.4, 3.5, -6.0), Color("#ffaa33"), 1.2)
+	var lbl_food = _add_label3d(mezz_parent, "Sign_FoodCourt", "FOOD COURT ->", Vector3(-24.4, 3.4, -6.0), Color("#ffaa33"), 1.0)
 	lbl_food.rotation_degrees.y = 90
 	
 	# Low guard wall / railing overlooking the main plaza
@@ -202,7 +202,7 @@ func build_mall_greybox() -> void:
 	_add_box(mezz_parent, "MezzanineStripLight", Vector3(0.1, 0.1, 16.0), Vector3(-13.4, 1.15, -6.0), mat_strip)
 
 	# 5. Grand Structural Pillars (Colonnade Slalom for 12.0 m/s Skate Traversal)
-	var pillars_parent = CSGCombiner3D.new()
+	var pillars_parent = Node3D.new()
 	pillars_parent.name = "StructuralPillars"
 	level_root.add_child(pillars_parent)
 	if Engine.is_editor_hint():
@@ -236,13 +236,13 @@ func build_mall_greybox() -> void:
 		kiosks_parent.owner = get_tree().edited_scene_root if get_tree() else self
 
 	_add_prop_or_box(kiosks_parent, "Kiosk_BeeperWorld", "res://assets/models/mall_kiosk.glb", Vector3(4.2, 2.8, 3.2), Vector3(-5.5, 1.4, -15.0), mat_kiosk, false, 0.0)
-	_add_label3d(level_root, "Sign_BeeperWorld", "BEEPER WORLD", Vector3(-5.5, 3.8, -15.0), Color("#ffaa33"), 1.2)
+	_add_label3d(level_root, "Sign_BeeperWorld", "BEEPER WORLD", Vector3(-5.5, 3.8, -15.0), Color("#ffaa33"), 0.9)
 	
 	_add_prop_or_box(kiosks_parent, "Kiosk_NeonJulius", "res://assets/models/mall_kiosk.glb", Vector3(4.5, 2.8, 3.4), Vector3(5.5, 1.4, -15.0), mat_kiosk, false, 180.0)
-	_add_label3d(level_root, "Sign_NeonJulius", "NEON JULIUS", Vector3(5.5, 3.8, -15.0), Color("#ffaa33"), 1.2)
+	_add_label3d(level_root, "Sign_NeonJulius", "NEON JULIUS", Vector3(5.5, 3.8, -15.0), Color("#ffaa33"), 0.9)
 	
 	_add_prop_or_box(kiosks_parent, "Kiosk_CassetteVault", "res://assets/models/mall_kiosk.glb", Vector3(4.8, 2.8, 3.0), Vector3(16.5, 1.4, 5.0), mat_kiosk, false, 90.0)
-	var lbl_cass = _add_label3d(level_root, "Sign_CassetteVault", "CASSETTE VAULT", Vector3(16.5, 3.8, 5.0), Color("#ffaa33"), 1.2)
+	var lbl_cass = _add_label3d(level_root, "Sign_CassetteVault", "CASSETTE VAULT", Vector3(16.5, 3.8, 5.0), Color("#ffaa33"), 0.9)
 	lbl_cass.rotation_degrees.y = -90
 	
 	var lights_parent = Node3D.new()
@@ -298,21 +298,33 @@ func build_mall_greybox() -> void:
 	if Engine.is_editor_hint():
 		arena_parent.owner = get_tree().edited_scene_root if get_tree() else self
 
-	var mat_arena_ring = _create_material(Color(0.2, 0.0, 0.2), 0.8, 0.0, 1.0, Color(0.4, 0.0, 0.4), 1.0)
-	var arena_ring = CSGCylinder3D.new()
+	# Server pit: a faint dark disc plus a thin emissive magenta ring, so the Queen's red telegraph keeps its contrast.
+	var mat_arena_pit = _create_material(Color(0.09, 0.05, 0.11), 0.9)
+	var arena_pit = CSGCylinder3D.new()
+	arena_pit.name = "ArenaPit"
+	arena_pit.radius = 6.8
+	arena_pit.height = 0.03
+	arena_pit.position = Vector3(0, 0.015, -21.5)
+	arena_pit.material = mat_arena_pit
+	arena_pit.use_collision = false
+	arena_parent.add_child(arena_pit)
+	var mat_arena_ring = _create_material(Color(0.6, 0.0, 0.5), 0.5, 0.0, 1.0, Color(1.0, 0.0, 0.8), 1.6)
+	var arena_ring = CSGTorus3D.new()
 	arena_ring.name = "ArenaRing"
-	arena_ring.radius = 7.0
-	arena_ring.height = 0.04
-	arena_ring.position = Vector3(0, 0.02, -21.5)
+	arena_ring.inner_radius = 6.85
+	arena_ring.outer_radius = 7.0
+	arena_ring.sides = 64
+	arena_ring.ring_sides = 6
+	arena_ring.position = Vector3(0, 0.03, -21.5)
 	arena_ring.material = mat_arena_ring
 	arena_ring.use_collision = false
 	arena_parent.add_child(arena_ring)
 	
 	var mat_magenta_strip = _create_material(Color.MAGENTA, 0.5, 0.0, 1.0, Color.MAGENTA, 2.0)
 	_add_box(arena_parent, "ArenaBaseStrip", Vector3(14.0, 0.1, 0.2), Vector3(0, 0.05, -24.4), mat_magenta_strip)
-	_add_light(arena_parent, "Light_Modem1", Color.MAGENTA, 1.5, 10.0, Vector3(-5.0, 2.0, -23.0))
-	_add_light(arena_parent, "Light_Modem2", Color.MAGENTA, 1.5, 10.0, Vector3(5.0, 2.0, -23.0))
-	_add_light(arena_parent, "Light_Modem3", Color.MAGENTA, 1.5, 10.0, Vector3(0.0, 2.0, -20.0))
+	_add_light(arena_parent, "Light_Modem1", Color.MAGENTA, 0.7, 8.0, Vector3(-5.0, 2.0, -23.0))
+	_add_light(arena_parent, "Light_Modem2", Color.MAGENTA, 0.7, 8.0, Vector3(5.0, 2.0, -23.0))
+	_add_light(arena_parent, "Light_Modem3", Color.MAGENTA, 0.6, 8.0, Vector3(0.0, 2.5, -20.0))
 	
 	var lbl1 = _add_label3d(arena_parent, "ArenaSign_Title", "MEGABYTE ELECTRONICS", Vector3(0, 3.8, -24.4), Color.CYAN, 1.5)
 	var lbl2 = _add_label3d(arena_parent, "ArenaSign_Sub", "56K // NO CARRIER", Vector3(0, 3.1, -24.4), Color.MAGENTA, 1.0)

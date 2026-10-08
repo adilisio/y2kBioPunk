@@ -443,24 +443,26 @@ func _setup_ui_layout() -> void:
 		hp_bar.offset_top = -60.0
 		hp_bar.offset_bottom = -24.0
 		hp_bar.custom_minimum_size.y = 36.0
-		hp_bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
-		hp_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
-
-	if hp_bar:
-		hp_bar.custom_minimum_size.y = 36.0
-		var fill_style = StyleBoxFlat.new()
-		fill_style.bg_color = Color(0.0, 0.95, 0.4, 1.0)
-		fill_style.set_corner_radius_all(4)
-		fill_style.border_width_left = 1
-		fill_style.border_width_top = 1
-		fill_style.border_width_right = 1
-		fill_style.border_width_bottom = 1
-		fill_style.border_color = Color(0.3, 1.0, 0.6, 0.9)
+		
+		# Inner fill with subtle 2-px scanline pattern using a generated texture
+		var img = Image.create(2, 4, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0.0, 0.95, 0.4, 0.9))
+		img.set_pixel(0, 2, Color(0.0, 0.8, 0.3, 0.7))
+		img.set_pixel(1, 2, Color(0.0, 0.8, 0.3, 0.7))
+		img.set_pixel(0, 3, Color(0.0, 0.8, 0.3, 0.7))
+		img.set_pixel(1, 3, Color(0.0, 0.8, 0.3, 0.7))
+		var scanline_tex = ImageTexture.create_from_image(img)
+		
+		var fill_style = StyleBoxTexture.new()
+		fill_style.texture = scanline_tex
+		fill_style.axis_stretch_horizontal = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
+		fill_style.axis_stretch_vertical = StyleBoxTexture.AXIS_STRETCH_MODE_TILE
 		hp_bar.add_theme_stylebox_override("fill", fill_style)
 
+		# Dark translucent panel, 2 px green border
 		var bg_style = StyleBoxFlat.new()
-		bg_style.bg_color = Color(0.05, 0.08, 0.06, 0.92)
-		bg_style.border_color = Color(0.0, 0.6, 0.25, 0.8)
+		bg_style.bg_color = Color(0.05, 0.08, 0.06, 0.85)
+		bg_style.border_color = Color(0.0, 1.0, 0.4, 1.0)
 		bg_style.set_border_width_all(2)
 		bg_style.set_corner_radius_all(4)
 		hp_bar.add_theme_stylebox_override("background", bg_style)
@@ -491,9 +493,9 @@ func _setup_ui_layout() -> void:
 		action_bar.anchor_right = 1.0
 		action_bar.anchor_bottom = 1.0
 		action_bar.offset_right = -10.0
-		action_bar.offset_bottom = -105.0
+		action_bar.offset_bottom = -138.0
 		action_bar.offset_left = -210.0
-		action_bar.offset_top = -170.0
+		action_bar.offset_top = -203.0
 		action_bar.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 		action_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
 

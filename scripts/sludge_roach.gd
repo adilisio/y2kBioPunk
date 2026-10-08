@@ -211,7 +211,7 @@ func _enter_windup(dir: Vector3) -> void:
 	velocity.z = 0.0
 	_play_sfx(0.25, 1300.0, 0.85)
 	if visual_mesh:
-		_flash_hit_visual()
+		_flash_hit_visual(true)
 		var cue := create_tween()
 		cue.tween_property(visual_mesh, "scale", rest_scale * Vector3(1.3, 0.5, 1.3), 0.1)
 	print_verbose("[SludgeRoach] wind-up (0.35s)")
@@ -291,9 +291,11 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 	if current_health <= 0:
 		_die()
 
-func _flash_hit_visual() -> void:
+func _flash_hit_visual(is_state: bool = false) -> void:
 	if visual_mesh and is_instance_valid(visual_mesh):
-		var flash_mat := EnemyModel.tint_material(Color(1.0, 0.2, 0.15), 0.55, 0.5)
+		var alpha = 0.3 if is_state else 0.55
+		var energy = 0.9 if is_state else 0.5
+		var flash_mat := EnemyModel.tint_material(Color(1.0, 0.2, 0.15), alpha, energy)
 		EnemyModel.tint(visual_mesh, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():

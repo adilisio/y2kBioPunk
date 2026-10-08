@@ -267,8 +267,9 @@ func _process_aoe(delta: float) -> void:
 		aoe_flashing = true
 		if aoe_telegraph_ring:
 			var mat := aoe_telegraph_ring.material as StandardMaterial3D
-			mat.albedo_color = Color(1, 1, 1, 0.6)
-			mat.emission = Color.WHITE
+			mat.albedo_color = Color(1.0, 0.35, 0.65, 0.5)
+			mat.emission = Color(1.0, 0.35, 0.65, 1.0)
+			mat.emission_energy_multiplier = 1.5
 	if state_timer <= 0.0:
 		_detonate_aoe()
 		_enter_idle()

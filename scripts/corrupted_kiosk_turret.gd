@@ -310,7 +310,12 @@ func _build_visuals() -> void:
 	screen_light.shadow_enabled = false
 	head_pivot.add_child(screen_light)
 
-	# The whole kiosk model hangs off the pivot so it turns toward the player; ground it 1.6 m below the pivot.
+	screen_mesh = CSGBox3D.new()
+	screen_mesh.name = "CRTScreen"
+	screen_mesh.size = Vector3(0.6, 0.45, 0.1)
+	screen_mesh.position = Vector3(0.0, 0.25, 0.6)
+	head_pivot.add_child(screen_mesh)
+
 	var model := EnemyModel.attach(head_pivot, model_path, model_height, -1.6, model_yaw)
 	if model:
 		visual_root = model
@@ -347,12 +352,6 @@ func _build_visuals() -> void:
 	antenna_light.material = antenna_mat
 	antenna.add_child(antenna_light)
 	head_pivot.add_child(antenna)
-
-	screen_mesh = CSGBox3D.new()
-	screen_mesh.name = "CRTScreen"
-	screen_mesh.size = Vector3(0.6, 0.45, 0.1)
-	screen_mesh.position = Vector3(0.0, 0.25, 0.5)
-	head_pivot.add_child(screen_mesh)
 
 	barrel_mesh = CSGCylinder3D.new()
 	barrel_mesh.name = "BioBarrel"

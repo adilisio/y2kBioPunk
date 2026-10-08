@@ -84,6 +84,17 @@ Playtest done 2026-10-08 (mouse+keyboard, ~10 min). All five checklist items rul
 4. Death respawns enemies: keep. Re-fighting the plaza is fine; kill persistence stays out of scope.
 5. Roach pack cap of 2 simultaneous attackers: keep. "Not annoying, makes it interesting."
 
+## Performance (2026-10-08)
+Anthony reported poor fps/smoothness. Measured with `shot_harness.gd` new steps (`fps:<s>` prints avg/1%-low, CPU vs GPU render time, primitives; `scale`, `msaa`, `ssao`, `glow`, `fog`, `shadows`, `omni` toggles for A/B), window off-screen at 2560x1440.
+- **Root cause on the machine:** `nvidia-smi` shows `SW Thermal Slowdown: Active`; the GTX 1060 Max-Q sits at 79-81 C while idle and is pinned to its 139 MHz idle clock (max 1670) even at 100 % utilisation. The game is entirely GPU-bound at that clock (render_gpu 163 ms, CPU 0.7 ms). At full clock the same frame would be ~14 ms. Fix is cooling/power settings on the laptop, not code.
+- **Game-side reductions** (measured at the pinned clock, so numbers are stable but ~12x slower than a healthy GPU): render_gpu 163 -> 90 ms, primitives 506k -> 209k, draw calls 427 -> 310.
+  - Builder omni "emergency" lights no longer cast shadows (5 cubemap shadow passes gone; biggest geometry saver).
+  - Directional shadow: PSSM 2 splits, max distance 45 m, blur 1.0; shadow atlases 2048; soft-shadow filter quality low.
+  - `scaling_3d/mode=1` (FSR 1.0) at `scale=0.75`: 3D renders at 1440x810 and upscales to the 1080p viewport.
+  - SSAO quality very low (still enabled: `test_presentation` requires SSAO+glow); glow upscale linear. MSAA 2x kept (measured free).
+  - Tried and reverted: single-split orthogonal shadow and mesh LOD threshold 4 px (no measurable gain).
+- Remaining levers if still needed: drop to scale 0.67; SSAO off (requires relaxing `test_presentation`); fewer enemy polys via remesh (10k each now); shader warm-up for first-use hitches (1 % lows).
+
 ## Machine-state changes made by the Director
 - 2026-10-07 15:48: `HKCU\Software\Microsoft\Windows\Windows Error Reporting\DontShowUI = 1` (was unset) so Godot crash-at-exit dialogs from headless tests stop popping. Revert with `Remove-ItemProperty` if unwanted.
 - Worktrees under `.worktrees/` (gitignored); all merged and removed except a stale `wp6` directory copy (locked during cleanup; safe to delete).

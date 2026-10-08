@@ -378,7 +378,7 @@ func _add_light(parent: Node, node_name: String, color: Color, energy: float, ra
 	light.light_energy = energy
 	light.omni_range = range_val
 	light.position = pos
-	light.shadow_enabled = true
+	light.shadow_enabled = false # mood lights; omni shadow cubemaps re-render the scene six times each
 	parent.add_child(light)
 	if Engine.is_editor_hint():
 		light.owner = get_tree().edited_scene_root if get_tree() else self

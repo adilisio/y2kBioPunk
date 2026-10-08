@@ -16,7 +16,7 @@ const HINT_ORDER := ["move", "evade", "tape", "skates", "secondary", "grind", "t
 const HINT_TEXT := {
 	"move": "MOVE: WASD",
 	"evade": "EVADE: SHIFT or V  (i-frames) // SWING: LMB",
-	"tape": "TAPE: T cycles mixtapes — each tape shifts STR/AGI/VIT/VIBE",
+	"tape": "TAPE: T — each tape shifts STR/AGI/VIT/VIBE (VIBE = crit chance)",
 	"skates": "SKATES: K  — +38% speed, rails become grindable",
 	"secondary": "SECONDARY: RMB or F fires; Q swaps flamethrower / disks",
 	"grind": "GRIND: skate along the rail and press SPACE to hop on; SPACE again to slam off",

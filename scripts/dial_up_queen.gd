@@ -516,7 +516,7 @@ func _die() -> void:
 	# Start protection and pager suppression before awarding the Queen's XP.
 	emit_signal("boss_defeated")
 	if target_player and is_instance_valid(target_player) and target_player.has_method("gain_xp"):
-		target_player.call("gain_xp", 250)
+		target_player.call("gain_xp", 120)
 
 	# Dramatic shrink and explosion fade
 	if queen_body:

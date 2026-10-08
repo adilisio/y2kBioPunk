@@ -59,6 +59,7 @@ public:
 	};
 
 private:
+	void attach_hand_bat();
 	// Traversal State Machine
 	MovementState current_state = STATE_NORMAL;
 	bool ready_initialized = false;
@@ -255,6 +256,15 @@ public:
 	void set_is_attacking(bool p_attacking);
 	void attack();
 	float get_effective_bat_damage() const;
+	// Effective stats include tape bonuses. Strike = base_attack_damage + 4 * STR.
+	// HP = max(1, 100 + 12 * (VIT - 10)); preserves 100 HP at VIT 10.
+	// Walk = (base_movement_speed + 2.7) * 1.03^(AGI - 18).
+	// Skate = skate_speed * 1.03^(AGI - 18); shipped 18 AGI remains 8.7 / 12 m/s.
+	// Disk = 25 + 2.2 * AGI. Crit chance = clamp(0.02 * VIBE, 0, 1).
+	// A melee strike rolls once: crit damage x1.75 (then integer damage interface),
+	// hit-stop +0.04 seconds and a cached synthesized crit_pop cue.
+	float get_critical_chance() const;
+	float get_disk_damage() const;
 	void take_damage(float p_amount, const Vector3 &p_knockback = Vector3());
 	void heal(float p_amount);
 	Area3D *get_attack_sensor() const;

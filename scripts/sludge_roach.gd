@@ -417,7 +417,7 @@ func _die() -> void:
 		var p = tree.get_first_node_in_group("player")
 		if not p and tree.current_scene:
 			p = tree.current_scene.find_child("Player", true, false)
-		if p and p.has_method("gain_xp"):
+		if p and p.has_method("gain_xp") and not get_meta("summoned_by_boss", false):
 			p.call("gain_xp", 15)
 
 	var tween = create_tween()

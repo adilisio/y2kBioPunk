@@ -86,7 +86,7 @@ func run() -> void:
 	var cp = get_first_node_in_group("checkpoints")
 	p.global_position = cp.global_position + Vector3(0, 0.5, 0)
 	p.velocity = Vector3.ZERO
-	await frames(2)
+	await poll(func(): return sm.has_save_data(), 1.0)
 	var saved_level: int = p.get_level()
 	var saved_xp: int = p.get_current_xp()
 	var saved_strength: int = p.get_strength()

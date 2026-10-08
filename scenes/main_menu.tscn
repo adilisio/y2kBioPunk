@@ -51,7 +51,7 @@ theme_override_colors/font_shadow_color = Color(0, 0.25, 0.2, 0.8)
 theme_override_constants/shadow_offset_x = 2
 theme_override_constants/shadow_offset_y = 3
 theme_override_font_sizes/font_size = 46
-text = "Y2"
+text = "Y2K: BIO-PUNK"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -99,18 +99,6 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "CONTINUE"
 
-[node name="OptionsButton" type="Button" parent="VBoxContainer"]
-custom_minimum_size = Vector2(260, 44)
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "OPTIONS"
-
-[node name="CreditsButton" type="Button" parent="VBoxContainer"]
-custom_minimum_size = Vector2(260, 44)
-layout_mode = 2
-theme_override_font_sizes/font_size = 16
-text = "CREDITS"
-
 [node name="ExitButton" type="Button" parent="VBoxContainer"]
 custom_minimum_size = Vector2(260, 44)
 layout_mode = 2
@@ -137,6 +125,4 @@ horizontal_alignment = 1
 
 [connection signal="pressed" from="VBoxContainer/NewGameButton" to="." method="on_new_game_pressed"]
 [connection signal="pressed" from="VBoxContainer/LoadGameButton" to="." method="on_load_game_pressed"]
-[connection signal="pressed" from="VBoxContainer/OptionsButton" to="." method="on_options_pressed"]
-[connection signal="pressed" from="VBoxContainer/CreditsButton" to="." method="on_credits_pressed"]
 [connection signal="pressed" from="VBoxContainer/ExitButton" to="." method="on_exit_pressed"]

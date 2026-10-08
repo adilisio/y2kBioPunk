@@ -101,6 +101,8 @@ Anthony reported poor fps/smoothness. Measured with `shot_harness.gd` new steps 
 - Remaining levers if still needed: drop to scale 0.67; SSAO off (requires relaxing `test_presentation`); fewer enemy polys via remesh (10k each now); shader warm-up for first-use hitches (1 % lows).
 
 ## Machine-state changes made by the Director
+- 2026-10-08 10:50: Anthony installed Dell Power Manager and switched Thermal Management from **Quiet** (the cause of the 73-80 C idle and GPU throttling) to **Ultra Performance**. Director closed Chrome, Edge WebView, Teams, Steam, OneDrive, Ollama, SteelSeries GG, Phone Link, Waves audio service for the session (all user-restartable; nothing system-level). Result: GPU idle 62 C; uncapped stress run holds 1670 MHz at 95 % for 12 s with no SW thermal slowdown (temp 72 -> 77 C, target 78), 295 fps avg / 212 fps 1 %-low at 1440x810. At vsync 60 the load is ~25 %, so sustained play should stay below the target.
+
 - 2026-10-07 15:48: `HKCU\Software\Microsoft\Windows\Windows Error Reporting\DontShowUI = 1` (was unset) so Godot crash-at-exit dialogs from headless tests stop popping. Revert with `Remove-ItemProperty` if unwanted.
 - Worktrees under `.worktrees/` (gitignored); all merged and removed except a stale `wp6` directory copy (locked during cleanup; safe to delete).
 

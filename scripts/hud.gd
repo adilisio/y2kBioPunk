@@ -359,7 +359,8 @@ func _ready() -> void:
 func _setup_window_mode() -> void:
 	# Configure game to boot in Windowed Fullscreen (Borderless Fullscreen)
 	# In Godot 4, WINDOW_MODE_FULLSCREEN is borderless windowed fullscreen.
-	if not Engine.is_editor_hint():
+	# Respect an explicit --windowed launch (QA tooling and debugging); players get fullscreen from project.godot too.
+	if not Engine.is_editor_hint() and not ("--windowed" in OS.get_cmdline_args()):
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 func _setup_ui_layout() -> void:

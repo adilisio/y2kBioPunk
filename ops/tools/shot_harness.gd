@@ -3,6 +3,7 @@ extends SceneTree
 ## Usage (windowed, NOT headless):
 ##   Godot_v4.3-stable_win64.exe --path . --windowed --resolution 1280x720 -s ops/tools/shot_harness.gd -- scene=res://scenes/FloodedMall_Greybox.tscn out=ops/runs/shots/greybox steps="wait:2,shot,hold:move_forward:1.5,shot,press:toggle_skates,hold:move_forward:2,shot,press:attack,wait:0.3,shot"
 ## Steps: wait:<s> | shot | press:<action> | hold:<action>:<s> | release:<action> | key:<keyname> | quit
+##        tp:<x>:<y>:<z> | heal | invuln:<0|1> | dmg:<name>:<amount> | fps:<s> | profile:<s> | plus A/B toggles (see match below)
 ## Each 'shot' writes <out>.<n>.png. The harness quits at the end of the step list.
 
 var _out := "ops/runs/shots/shot"
@@ -74,6 +75,34 @@ func _run_steps() -> void:
 				await process_frame
 			"quit":
 				return
+			"tp":
+				# tp:<x>:<y>:<z> teleports the player (Director shot tooling)
+				var pl: Node = get_first_node_in_group("player")
+				if pl is Node3D:
+					(pl as Node3D).global_position = Vector3(float(parts[1]), float(parts[2]), float(parts[3]))
+					if pl is CharacterBody3D:
+						(pl as CharacterBody3D).velocity = Vector3.ZERO
+				await process_frame
+				await process_frame
+			"heal":
+				var pl: Node = get_first_node_in_group("player")
+				if pl and pl.has_method("set_current_health") and pl.has_method("get_max_health"):
+					pl.call("set_current_health", pl.call("get_max_health"))
+				await process_frame
+			"invuln":
+				var pl: Node = get_first_node_in_group("player")
+				if pl and pl.has_method("set_is_invincible"):
+					pl.call("set_is_invincible", parts[1] == "1")
+				await process_frame
+			"dmg":
+				# dmg:<name-substring>:<amount> damages matching enemies/boss (e.g. dmg:queen:99999 for the victory card)
+				var hit := 0
+				for n in get_nodes_in_group("enemies") + get_nodes_in_group("boss"):
+					if is_instance_valid(n) and n.has_method("take_damage") and (String(n.name).containsn(parts[1]) or (n.get_script() and String(n.get_script().resource_path).containsn(parts[1]))):
+						n.call("take_damage", int(parts[2]), Vector3.ZERO)
+						hit += 1
+				print("[HARNESS] dmg:%s:%s hit %d" % [parts[1], parts[2], hit])
+				await process_frame
 			"fps":
 				await _measure_fps(float(parts[1]))
 			"cap":

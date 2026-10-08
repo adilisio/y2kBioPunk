@@ -29,6 +29,11 @@ var target_player: Node3D = null
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 # Visual Nodes
+@export var model_path: String = "res://assets/models/kiosk_turret.glb"
+@export var model_height: float = 1.8
+@export var model_yaw: float = 0.0
+var visual_root: Node3D = null
+var screen_light: OmniLight3D = null
 var body_mesh: CSGBox3D = null
 var head_pivot: Node3D = null
 var barrel_mesh: CSGCylinder3D = null
@@ -254,12 +259,9 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 		_die()
 
 func _flash_hit_visual() -> void:
-	if body_mesh and is_instance_valid(body_mesh):
-		var flash_mat = StandardMaterial3D.new()
-		flash_mat.albedo_color = Color(1.0, 0.2, 0.1, 1.0)
-		flash_mat.emission_enabled = true
-		flash_mat.emission = Color(1.0, 0.3, 0.1, 1.0)
-		body_mesh.material_override = flash_mat
+	if visual_root and is_instance_valid(visual_root):
+		var flash_mat := EnemyModel.tint_material(Color(1.0, 0.25, 0.1), 0.55, 0.5)
+		EnemyModel.tint(visual_root, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():
 			flash_tween.kill()
@@ -268,8 +270,8 @@ func _flash_hit_visual() -> void:
 		flash_tween.tween_callback(Callable(self, "_reset_flash_visual"))
 
 func _reset_flash_visual() -> void:
-	if body_mesh and is_instance_valid(body_mesh):
-		body_mesh.material_override = null
+	if visual_root and is_instance_valid(visual_root):
+		EnemyModel.untint(visual_root)
 
 func _shake_hit_reaction() -> void:
 	if head_pivot and is_instance_valid(head_pivot):
@@ -280,6 +282,8 @@ func _shake_hit_reaction() -> void:
 		hit_tween.tween_property(head_pivot, "position", Vector3(0.0, 1.6, 0.0), 0.1)
 
 func _set_screen_color(col: Color) -> void:
+	if screen_light and is_instance_valid(screen_light):
+		screen_light.light_color = col
 	if screen_mesh and is_instance_valid(screen_mesh):
 		if not screen_mat:
 			screen_mat = StandardMaterial3D.new()
@@ -289,7 +293,28 @@ func _set_screen_color(col: Color) -> void:
 		screen_mat.emission = col
 
 func _build_visuals() -> void:
-	if body_mesh:
+	if visual_root:
+		return
+
+	head_pivot = Node3D.new()
+	head_pivot.name = "TurretHead"
+	head_pivot.position = Vector3(0.0, 1.6, 0.0)
+	add_child(head_pivot)
+
+	# Screen glow light follows the state colour (idle green, tracking amber, charging red).
+	screen_light = OmniLight3D.new()
+	screen_light.name = "ScreenGlow"
+	screen_light.position = Vector3(0.0, 0.2, 0.8)
+	screen_light.omni_range = 3.5
+	screen_light.light_energy = 1.4
+	screen_light.shadow_enabled = false
+	head_pivot.add_child(screen_light)
+
+	# The whole kiosk model hangs off the pivot so it turns toward the player; ground it 1.6 m below the pivot.
+	var model := EnemyModel.attach(head_pivot, model_path, model_height, -1.6, model_yaw)
+	if model:
+		visual_root = model
+		_add_collision()
 		return
 
 	body_mesh = CSGBox3D.new()
@@ -302,11 +327,8 @@ func _build_visuals() -> void:
 	body_mat.roughness = 0.7
 	body_mesh.material = body_mat
 	add_child(body_mesh)
+	visual_root = body_mesh
 
-	head_pivot = Node3D.new()
-	head_pivot.name = "TurretHead"
-	head_pivot.position = Vector3(0.0, 1.6, 0.0)
-	add_child(head_pivot)
 	
 	var antenna = CSGCylinder3D.new()
 	antenna.name = "Antenna"
@@ -343,6 +365,9 @@ func _build_visuals() -> void:
 	barrel_mesh.material = barrel_mat
 	head_pivot.add_child(barrel_mesh)
 
+	_add_collision()
+
+func _add_collision() -> void:
 	var col_shape = CollisionShape3D.new()
 	var box_col = BoxShape3D.new()
 	box_col.size = Vector3(1.5, 2.2, 1.5)

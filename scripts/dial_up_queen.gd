@@ -37,7 +37,13 @@ var is_invulnerable: bool = false
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 # Visual Nodes
-var queen_body: CSGSphere3D = null
+@export var model_path: String = "res://assets/models/dial_up_queen.glb"
+@export var model_height: float = 4.0
+@export var model_yaw: float = 0.0
+@export var model_pitch: float = -50.0 # tilt the upright moth forward so the wings read from the isometric camera
+var uses_model: bool = false
+var body_tint: StandardMaterial3D = null
+var queen_body: Node3D = null
 var antenna_array: Node3D = null
 var wing_left: CSGBox3D = null
 var wing_right: CSGBox3D = null
@@ -90,6 +96,8 @@ func _physics_process(delta: float) -> void:
 		var flap_angle = sin(wing_flap_timer) * 0.45
 		wing_left.rotation.z = flap_angle
 		wing_right.rotation.z = -flap_angle
+	elif uses_model and queen_body:
+		queen_body.position.y = sin(wing_flap_timer * 0.12) * 0.12 # hover bob stands in for the wing flap
 
 	_find_player()
 
@@ -364,7 +372,11 @@ func _trigger_phase_transition(new_phase: int) -> void:
 			phase_mat.albedo_color = Color(0.95, 0.1, 0.4, 1.0)
 			phase_mat.emission_enabled = true
 			phase_mat.emission = Color(1.0, 0.15, 0.5, 1.0)
-		queen_body.material = phase_mat
+		if uses_model:
+			body_tint = EnemyModel.tint_material(phase_mat.emission, 0.35, 0.5)
+			EnemyModel.tint(queen_body, body_tint)
+		elif queen_body is CSGSphere3D:
+			(queen_body as CSGSphere3D).material = phase_mat
 
 	# Force push wave repelling player
 	if target_player and is_instance_valid(target_player):
@@ -408,11 +420,8 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 
 func _flash_hit_visual() -> void:
 	if queen_body and is_instance_valid(queen_body):
-		var flash_mat = StandardMaterial3D.new()
-		flash_mat.albedo_color = Color(1.0, 0.2, 0.2, 1.0)
-		flash_mat.emission_enabled = true
-		flash_mat.emission = Color(1.0, 0.3, 0.3, 1.0)
-		queen_body.material_override = flash_mat
+		var flash_mat := EnemyModel.tint_material(Color(1.0, 0.25, 0.25), 0.55, 0.5)
+		EnemyModel.tint(queen_body, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():
 			flash_tween.kill()
@@ -422,7 +431,7 @@ func _flash_hit_visual() -> void:
 
 func _reset_flash_visual() -> void:
 	if is_instance_valid(queen_body):
-		queen_body.material_override = null
+		EnemyModel.tint(queen_body, body_tint)
 
 func _die() -> void:
 	if dying:
@@ -457,12 +466,19 @@ func _die() -> void:
 		queue_free()
 
 func _build_visuals() -> void:
+	var model := EnemyModel.attach(self, model_path, model_height, 0.0, model_yaw, model_pitch)
+	if model:
+		queen_body = model
+		uses_model = true
+		_build_shared_visuals()
+		return
+
 	# Main massive Queen thorax
-	queen_body = CSGSphere3D.new()
-	queen_body.name = "QueenThorax"
-	queen_body.radius = 1.4
-	queen_body.scale = Vector3(1.1, 1.3, 1.5)
-	queen_body.position = Vector3(0.0, 1.8, 0.0)
+	var thorax := CSGSphere3D.new()
+	thorax.name = "QueenThorax"
+	thorax.radius = 1.4
+	thorax.scale = Vector3(1.1, 1.3, 1.5)
+	thorax.position = Vector3(0.0, 1.8, 0.0)
 
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = Color(1.0, 0.18, 0.63, 1.0) # magenta/violet
@@ -470,8 +486,9 @@ func _build_visuals() -> void:
 	mat.roughness = 0.5
 	mat.emission_enabled = true
 	mat.emission = Color(0.8, 0.15, 0.5, 1.0)
-	queen_body.material = mat
-	add_child(queen_body)
+	thorax.material = mat
+	add_child(thorax)
+	queen_body = thorax
 
 	# Antenna Array (Dial-Up server rods)
 	antenna_array = Node3D.new()
@@ -513,6 +530,9 @@ func _build_visuals() -> void:
 	wing_right.material = wing_mat
 	add_child(wing_right)
 
+	_build_shared_visuals()
+
+func _build_shared_visuals() -> void:
 	# AoE Telegraph Ring
 	aoe_telegraph_ring = CSGCylinder3D.new()
 	aoe_telegraph_ring.name = "AoETelegraph"

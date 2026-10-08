@@ -31,7 +31,11 @@ var pounce_direction: Vector3 = Vector3.ZERO
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
 # Visual references
-var visual_mesh: CSGSphere3D = null
+@export var model_path: String = "res://assets/models/sludge_roach.glb"
+@export var model_height: float = 0.8
+@export var model_yaw: float = 0.0
+var visual_mesh: Node3D = null
+var rest_scale: Vector3 = Vector3.ONE
 var hit_tween: Tween = null
 var flash_tween: Tween = null
 var owns_pounce_slot := false
@@ -209,7 +213,7 @@ func _enter_windup(dir: Vector3) -> void:
 	if visual_mesh:
 		_flash_hit_visual()
 		var cue := create_tween()
-		cue.tween_property(visual_mesh, "scale", Vector3(1.3, 0.5, 1.3), 0.1)
+		cue.tween_property(visual_mesh, "scale", rest_scale * Vector3(1.3, 0.5, 1.3), 0.1)
 	print("[SludgeRoach] wind-up (0.35s)")
 
 func _process_windup(delta: float) -> void:
@@ -228,8 +232,8 @@ func _enter_pouncing(dir: Vector3) -> void:
 	# Quick squash visual
 	if visual_mesh:
 		var tween = create_tween()
-		tween.tween_property(visual_mesh, "scale", Vector3(0.7, 1.4, 0.7), 0.1)
-		tween.tween_property(visual_mesh, "scale", Vector3(1.3, 0.7, 1.3), 0.15)
+		tween.tween_property(visual_mesh, "scale", rest_scale * Vector3(0.7, 1.4, 0.7), 0.1)
+		tween.tween_property(visual_mesh, "scale", rest_scale * Vector3(1.3, 0.7, 1.3), 0.15)
 
 func _process_pouncing(delta: float) -> void:
 	state_timer -= delta
@@ -254,7 +258,7 @@ func _enter_repositioning() -> void:
 	_reset_flash_visual()
 	if visual_mesh:
 		var recover := create_tween()
-		recover.tween_property(visual_mesh, "scale", Vector3(0.8, 0.4, 1.3), 0.15)
+		recover.tween_property(visual_mesh, "scale", rest_scale, 0.15)
 	# Scuttle backward or to the side
 	var away_dir = -pounce_direction
 	if randf() > 0.5:
@@ -289,11 +293,8 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 
 func _flash_hit_visual() -> void:
 	if visual_mesh and is_instance_valid(visual_mesh):
-		var flash_mat = StandardMaterial3D.new()
-		flash_mat.albedo_color = Color(1.0, 0.15, 0.15, 1.0)
-		flash_mat.emission_enabled = true
-		flash_mat.emission = Color(1.0, 0.3, 0.2, 1.0)
-		visual_mesh.material_override = flash_mat
+		var flash_mat := EnemyModel.tint_material(Color(1.0, 0.2, 0.15), 0.55, 0.5)
+		EnemyModel.tint(visual_mesh, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():
 			flash_tween.kill()
@@ -303,16 +304,16 @@ func _flash_hit_visual() -> void:
 
 func _reset_flash_visual() -> void:
 	if is_instance_valid(visual_mesh):
-		visual_mesh.material_override = null
+		EnemyModel.untint(visual_mesh)
 
 func _apply_squash_and_stretch() -> void:
 	if visual_mesh and is_instance_valid(visual_mesh):
 		if hit_tween and hit_tween.is_valid():
 			hit_tween.kill()
 		hit_tween = create_tween()
-		hit_tween.tween_property(visual_mesh, "scale", Vector3(1.3, 0.6, 1.3), 0.06)
-		hit_tween.tween_property(visual_mesh, "scale", Vector3(0.8, 1.3, 0.8), 0.1)
-		hit_tween.tween_property(visual_mesh, "scale", Vector3(0.8, 0.4, 1.3), 0.1)
+		hit_tween.tween_property(visual_mesh, "scale", rest_scale * Vector3(1.3, 0.6, 1.3), 0.06)
+		hit_tween.tween_property(visual_mesh, "scale", rest_scale * Vector3(0.8, 1.3, 0.8), 0.1)
+		hit_tween.tween_property(visual_mesh, "scale", rest_scale, 0.1)
 
 func _apply_knockback(override_dir: Vector3 = Vector3.ZERO) -> void:
 	var impulse = 10.0 # Fragile roach gets launched back
@@ -331,30 +332,11 @@ func _apply_knockback(override_dir: Vector3 = Vector3.ZERO) -> void:
 	knockback_timer = 0.22
 
 func _build_visuals() -> void:
-	visual_mesh = CSGSphere3D.new()
-	visual_mesh.name = "RoachMesh"
-	visual_mesh.radius = 0.45
-	visual_mesh.radial_segments = 8
-	visual_mesh.rings = 6
-	visual_mesh.scale = Vector3(0.8, 0.4, 1.3) * 1.4 # Flattened beetle form
-	visual_mesh.position = Vector3(0.0, 0.25, 0.0)
-
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color("#c9541a") # orange-brown
-	mat.metallic = 0.5
-	mat.roughness = 0.4
-	mat.emission_enabled = true
-	mat.emission = Color(1.0, 0.18, 0.63, 1.0) # magenta underglow
-	visual_mesh.material = mat
-	add_child(visual_mesh)
-	
-	var head_wedge = CSGBox3D.new()
-	head_wedge.name = "HeadWedge"
-	head_wedge.size = Vector3(0.5, 0.2, 0.4)
-	head_wedge.position = Vector3(0, 0, -0.6) # Front facing (Z is backwards usually? No, in Godot forward is -Z)
-	head_wedge.material = mat.duplicate()
-	(head_wedge.material as StandardMaterial3D).emission_energy_multiplier = 2.0
-	visual_mesh.add_child(head_wedge)
+	var model := EnemyModel.attach(self, model_path, model_height, 0.0, model_yaw)
+	if model:
+		visual_mesh = model
+	else:
+		_build_csg_visuals()
 
 	# Collision
 	var col = CollisionShape3D.new()
@@ -363,6 +345,34 @@ func _build_visuals() -> void:
 	col.shape = box
 	col.position = Vector3(0.0, 0.25, 0.0)
 	add_child(col)
+
+func _build_csg_visuals() -> void:
+	var csg := CSGSphere3D.new()
+	csg.name = "RoachMesh"
+	csg.radius = 0.45
+	csg.radial_segments = 8
+	csg.rings = 6
+	rest_scale = Vector3(0.8, 0.4, 1.3) * 1.4 # Flattened beetle form
+	csg.scale = rest_scale
+	csg.position = Vector3(0.0, 0.25, 0.0)
+
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color("#c9541a") # orange-brown
+	mat.metallic = 0.5
+	mat.roughness = 0.4
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.18, 0.63, 1.0) # magenta underglow
+	csg.material = mat
+	add_child(csg)
+	
+	var head_wedge = CSGBox3D.new()
+	head_wedge.name = "HeadWedge"
+	head_wedge.size = Vector3(0.5, 0.2, 0.4)
+	head_wedge.position = Vector3(0, 0, -0.6) # Front facing (Z is backwards usually? No, in Godot forward is -Z)
+	head_wedge.material = mat.duplicate()
+	(head_wedge.material as StandardMaterial3D).emission_energy_multiplier = 2.0
+	csg.add_child(head_wedge)
+	visual_mesh = csg
 
 func _die() -> void:
 	if dying:

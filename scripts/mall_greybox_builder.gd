@@ -177,7 +177,8 @@ func build_mall_greybox() -> void:
 
 	# Central fountain sculpture pedestal inside the flooded basin
 	_add_cylinder(basin_parent, "FountainBase", 2.4, 0.8, Vector3(0, 0.1, 0), mat_low_wall)
-	_add_cylinder(basin_parent, "FountainSpire", 1.0, 2.4, Vector3(0, 1.7, 0), mat_pillar)
+	if _add_prop(basin_parent, "FountainSpire", "res://assets/models/fountain_sculpture.glb", Vector3(2.0, 2.6, 2.0), Vector3(0, 1.8, 0)) == null:
+		_add_cylinder(basin_parent, "FountainSpire", 1.0, 2.4, Vector3(0, 1.7, 0), mat_pillar)
 
 	# 4. Raised Mezzanine Terrace & Skate Ramp (West Wing)
 	var mezz_parent = Node3D.new()
@@ -220,9 +221,9 @@ func build_mall_greybox() -> void:
 	if Engine.is_editor_hint():
 		kiosks_parent.owner = get_tree().edited_scene_root if get_tree() else self
 
-	_add_box(kiosks_parent, "Kiosk_BeeperWorld", Vector3(4.2, 2.8, 3.2), Vector3(-5.5, 1.4, -15.0), mat_kiosk)
-	_add_box(kiosks_parent, "Kiosk_NeonJulius", Vector3(4.5, 2.8, 3.4), Vector3(5.5, 1.4, -15.0), mat_kiosk)
-	_add_box(kiosks_parent, "Kiosk_CassetteVault", Vector3(4.8, 2.8, 3.0), Vector3(16.5, 1.4, 5.0), mat_kiosk)
+	_add_prop_or_box(kiosks_parent, "Kiosk_BeeperWorld", "res://assets/models/mall_kiosk.glb", Vector3(4.2, 2.8, 3.2), Vector3(-5.5, 1.4, -15.0), mat_kiosk, false, 0.0)
+	_add_prop_or_box(kiosks_parent, "Kiosk_NeonJulius", "res://assets/models/mall_kiosk.glb", Vector3(4.5, 2.8, 3.4), Vector3(5.5, 1.4, -15.0), mat_kiosk, false, 180.0)
+	_add_prop_or_box(kiosks_parent, "Kiosk_CassetteVault", "res://assets/models/mall_kiosk.glb", Vector3(4.8, 2.8, 3.0), Vector3(16.5, 1.4, 5.0), mat_kiosk, false, 90.0)
 	
 	var lights_parent = Node3D.new()
 	lights_parent.name = "EmergencyLights"
@@ -241,9 +242,9 @@ func build_mall_greybox() -> void:
 	if Engine.is_editor_hint():
 		planters_parent.owner = get_tree().edited_scene_root if get_tree() else self
 
-	_add_box(planters_parent, "Planter_SouthWest", Vector3(6.5, low_wall_height, 2.0), Vector3(-5.5, low_wall_height * 0.5, 13.5), mat_low_wall)
-	_add_box(planters_parent, "Planter_SouthEast", Vector3(6.5, low_wall_height, 2.0), Vector3(5.5, low_wall_height * 0.5, 13.5), mat_low_wall)
-	_add_box(planters_parent, "Planter_EastWing", Vector3(2.0, low_wall_height, 6.5), Vector3(19.0, low_wall_height * 0.5, -6.0), mat_low_wall)
+	_add_prop_or_box(planters_parent, "Planter_SouthWest", "res://assets/models/mall_planter.glb", Vector3(6.5, low_wall_height, 2.0), Vector3(-5.5, low_wall_height * 0.5, 13.5), mat_low_wall, true, 0.0)
+	_add_prop_or_box(planters_parent, "Planter_SouthEast", "res://assets/models/mall_planter.glb", Vector3(6.5, low_wall_height, 2.0), Vector3(5.5, low_wall_height * 0.5, 13.5), mat_low_wall, true, 0.0)
+	_add_prop_or_box(planters_parent, "Planter_EastWing", "res://assets/models/mall_planter.glb", Vector3(2.0, low_wall_height, 6.5), Vector3(19.0, low_wall_height * 0.5, -6.0), mat_low_wall, true, 90.0)
 	_add_box(planters_parent, "CenterBenchDivider", Vector3(3.5, 0.55, 0.8), Vector3(0, 0.275, 14.5), mat_low_wall)
 
 	# 8. Storefront Alcoves (High Walls to test 45° Camera Occlusion & Clipping)
@@ -382,6 +383,42 @@ func _add_light(parent: Node, node_name: String, color: Color, energy: float, ra
 	if Engine.is_editor_hint():
 		light.owner = get_tree().edited_scene_root if get_tree() else self
 	return light
+
+## Places a Meshy prop fitted to the greybox volume `size` at `pos` (box centre, like `_add_box`), with an
+## invisible StaticBody3D box collider matching that volume so traversal is unchanged. `stretch_footprint`
+## scales x/z to fill the box (long planters); `yaw_degrees` turns the model. Returns null when the GLB is
+## missing so the caller can keep the CSG box.
+func _add_prop(parent: Node, node_name: String, model_path: String, size: Vector3, pos: Vector3, stretch_footprint: bool = false, yaw_degrees: float = 0.0) -> Node3D:
+	var root := EnemyModel.attach(parent, model_path, size.y, 0.0, yaw_degrees, 0.0, node_name)
+	if root == null:
+		return null
+	root.position = Vector3(pos.x, pos.y - size.y * 0.5, pos.z)
+	if stretch_footprint:
+		var box := EnemyModel.bounds(root)
+		if box.size.x > 0.01 and box.size.z > 0.01:
+			root.scale = Vector3(size.x / box.size.x, 1.0, size.z / box.size.z)
+
+	var body := StaticBody3D.new()
+	body.name = node_name + "_Collision"
+	body.position = pos
+	var shape := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = size
+	shape.shape = box_shape
+	body.add_child(shape)
+	parent.add_child(body)
+	if Engine.is_editor_hint():
+		var scene_owner = get_tree().edited_scene_root if get_tree() else self
+		root.owner = scene_owner
+		body.owner = scene_owner
+		shape.owner = scene_owner
+	return root
+
+func _add_prop_or_box(parent: Node, node_name: String, model_path: String, size: Vector3, pos: Vector3, mat: StandardMaterial3D, stretch_footprint: bool = false, yaw_degrees: float = 0.0) -> Node3D:
+	var prop := _add_prop(parent, node_name, model_path, size, pos, stretch_footprint, yaw_degrees)
+	if prop:
+		return prop
+	return _add_box(parent, node_name, size, pos, mat)
 
 func _add_box(parent: Node, node_name: String, size: Vector3, pos: Vector3, mat: StandardMaterial3D) -> CSGBox3D:
 	var box = CSGBox3D.new()

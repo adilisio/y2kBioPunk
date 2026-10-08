@@ -66,7 +66,7 @@ Director-authored changes: camera arm 16â†’12 m / FOV 45; boss gate moved to z â
 
 **Should fix later**
 4. Pillar fade when they occlude the player (WP-3 brief item; not verified in shots). North/west perimeter walls are still 4.5 m.
-5. Roach/cicada CSG silhouettes are placeholders (magenta capsule with wing planes). The wing planes read oddly from some angles.
+5. ~~Roach/cicada CSG silhouettes are placeholders.~~ Resolved 2026-10-08: Meshy-generated GLBs for cicada, roach, kiosk turret and Dial-Up Queen via `scripts/enemy_model.gd` (CSG kept as fallback). Verified with `check_enemy_models.gd`, 19/19 tests and off-screen shot-harness captures. Same pass added Meshy props through `_add_prop` in the builder: kiosk carts (3), fountain sculpture, planters (3, footprint-stretched); the old greybox boxes remain as invisible StaticBody colliders so traversal is unchanged. Pipeline: `ops/tools/meshy/`; credits spent ~210 of 437.
 6. Camera has look-ahead but no occlusion handling; the mezzanine edge can hide the player briefly.
 7. The character sheet locks input but has no "paused" visual; enemies keep moving while it is open.
 8. ~~The dormant C++ `StrandedSoldierNPC` / `MutatedBugEnemy` and the dialogue UI are unreferenced.~~ Deleted 2026-10-08 on Anthony's ruling (C++ sources, registrations, HUD dialogue box + scene nodes, soldier block in `test_systems.gd`).

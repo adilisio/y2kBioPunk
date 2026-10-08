@@ -53,7 +53,8 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
 - **Enemy AI Entities**:
   - `neon_cicada.gd`: wander/chase AI with telegraphed contact lunge, hit reaction and directional knockback (70 HP).
   - `sludge_roach.gd`: flank, wind-up, pounce and vulnerable recovery with pack attack limits (45 HP).
-  - `corrupted_kiosk_turret.gd`: Stationary mortar turret with dynamic CSG mesh construction and arc projectile launcher.
+  - `corrupted_kiosk_turret.gd`: Stationary mortar turret with arc projectile launcher; the whole kiosk model turns on the head pivot and a screen-glow light carries the state colour.
+  - `enemy_model.gd` (`EnemyModel`): attaches a GLB under a root Node3D fitted to a target height, faces -Z, grounds it, and tints via `material_overlay` so hit flashes keep textures. Every enemy falls back to its CSG body when the GLB is missing.
 - **Boss Encounter**:
   - `dial_up_queen.gd`: 3-phase modem boss (1500 HP) featuring Modem Screech AoE, minion summons, and shockwave pulses.
 - **Level & World Generation**:
@@ -97,6 +98,7 @@ y2k-biopunk-rpg/
 │   ├── corrupted_kiosk_turret.gd
 │   ├── dial_up_queen.gd
 │   ├── disk_projectile.gd
+│   ├── enemy_model.gd
 │   ├── health_candy_pickup.gd
 │   ├── hud.gd
 │   ├── isometric_camera.gd
@@ -115,9 +117,10 @@ y2k-biopunk-rpg/
 │   ├── player.tscn
 │   └── Meshy_AI_biopunk_delinquent_*.glb
 │
+├── assets/models/              # Meshy-generated GLBs (enemies, boss, props) + their .import files
 ├── music/                      # Cassette tape audio tracks
 ├── sprites/                    # Spritesheets & 2D art
-|-- ops/                        # CONTEXT.md, DIRECTOR_LEDGER.md, briefs/, reports/, tools/, runs/
+|-- ops/                        # CONTEXT.md, DIRECTOR_LEDGER.md, briefs/, reports/, tools/, runs/; ops/secrets/ is gitignored
 `-- tests/                      # Headless SceneTree scripts; inventory below
 ```
 
@@ -160,6 +163,8 @@ powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1    # finds Godo
 The runner discovers `test_*.gd` and `verify_*.gd`, checks exit codes, script errors and failed results, enforces a timeout, and stores logs in `ops/runs/tests/`. `_test_util.gd` provides assertions, cleanup and isolated saves. Passing does not imply warning-free rendering or an audio playtest.
 
 Current tests: `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_critical_path`, `test_cursor_aiming`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_menu_flow`, `test_onboarding`, `test_presentation`, `test_slice_e2e`, `test_systems`, `test_tapes`, and `verify_camera_and_hud` (all `.gd`).
+
+`ops/tools/meshy/meshy_gen.py` generates textured GLBs from `manifest.json` via the Meshy Text-to-3D API (key from `MESHY_API_KEY` or gitignored `ops/secrets/meshy.key`; task ids cached under `ops/runs/meshy/` so reruns do not re-spend credits). After adding a GLB run `--import` headlessly, then `ops/tools/inspect_glb.gd -- res://assets/models/<name>.glb` for bounds and `ops/tools/check_enemy_models.gd` to confirm each enemy attaches its model and flashes. GLB imports use `gltf/embedded_image_handling=3` so textures stay inside the imported scene instead of being extracted as loose JPEGs.
 
 `ops/tools/shot_harness.gd` captures in-engine screenshots and scripted input with `scene=`, `out=` and `steps=` arguments after `--`. Steps include `wait`, `shot`, `press`, `hold`, `release`, `key` and `quit`. It requires rendered/windowed Godot and is Director/human tooling: agents must not run it windowed or claim headless screenshots prove presentation. `shot.ps1` is also windowed tooling. `sim_steer.gd`, `smoke_mall.gd` and `balance_table.gd` are diagnostics; `build_greybox.gd` is a scene generator, not a test.
 

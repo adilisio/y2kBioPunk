@@ -41,7 +41,11 @@ var knockback_timer: float = 0.0
 # Standard 3D physics gravity
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
-@onready var visual_mesh: GeometryInstance3D = get_node_or_null("CSGCylinder3D")
+@export var model_path: String = "res://assets/models/neon_cicada.glb"
+@export var model_height: float = 1.2
+@export var model_yaw: float = 0.0
+var visual_mesh: Node3D = null
+var flash_mat: StandardMaterial3D = null
 var hit_tween: Tween
 var flash_tween: Tween
 var detection_area: Area3D = null
@@ -65,8 +69,20 @@ func _ready() -> void:
 	collision_layer = 4
 	collision_mask = 1 | 2
 
+	_setup_visuals()
 	_setup_detection_area()
 	_enter_idle()
+
+func _setup_visuals() -> void:
+	var csg := get_node_or_null("CSGCylinder3D")
+	# Capsule collider spans y -1..1, so the floor sits 1 m below the body origin.
+	var model := EnemyModel.attach(self, model_path, model_height, -1.0, model_yaw)
+	if model:
+		visual_mesh = model
+		if csg:
+			csg.queue_free()
+	else:
+		visual_mesh = csg as Node3D
 
 func _setup_detection_area() -> void:
 	detection_area = get_node_or_null("DetectionArea3D") as Area3D
@@ -222,9 +238,10 @@ func _enter_windup(dir: Vector3) -> void:
 		var cue := create_tween()
 		cue.tween_property(visual_mesh, "scale", Vector3(1.4, 0.8, 1.4), 0.25)
 		cue.tween_property(visual_mesh, "scale", Vector3.ONE, 0.25)
-		var pulse := create_tween()
-		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 0.9, 0.25)
-		pulse.tween_property(visual_mesh.material_override, "emission_energy_multiplier", 0.45, 0.25)
+		if flash_mat:
+			var pulse := create_tween()
+			pulse.tween_property(flash_mat, "emission_energy_multiplier", 0.9, 0.25)
+			pulse.tween_property(flash_mat, "emission_energy_multiplier", 0.45, 0.25)
 	print("[NeonDialUpCicada] wind-up (0.5s)")
 
 func _process_windup(delta: float) -> void:
@@ -268,15 +285,10 @@ func take_damage(amount: int, knockback_dir: Vector3 = Vector3.ZERO) -> void:
 		_die()
 
 func _flash_hit_visual() -> void:
-	if not visual_mesh or not is_instance_valid(visual_mesh):
-		visual_mesh = get_node_or_null("CSGCylinder3D")
 	if visual_mesh and is_instance_valid(visual_mesh):
-		var flash_mat = StandardMaterial3D.new()
-		flash_mat.albedo_color = Color(1.0, 0.1, 0.1, 1.0)
-		flash_mat.emission_enabled = true
-		flash_mat.emission = Color(1.0, 0.15, 0.15, 1.0)
-		flash_mat.emission_energy_multiplier = 0.45  # the scene runs ACES + glow; keep the red from blowing out to white
-		visual_mesh.material_override = flash_mat
+		# Translucent overlay keeps the model texture visible; low energy so ACES + glow does not blow it out to white.
+		flash_mat = EnemyModel.tint_material(Color(1.0, 0.12, 0.12), 0.55, 0.45)
+		EnemyModel.tint(visual_mesh, flash_mat)
 
 		if flash_tween and flash_tween.is_valid():
 			flash_tween.kill()
@@ -286,11 +298,9 @@ func _flash_hit_visual() -> void:
 
 func _reset_flash_visual() -> void:
 	if is_instance_valid(visual_mesh):
-		visual_mesh.material_override = null
+		EnemyModel.untint(visual_mesh)
 
 func _apply_squash_and_stretch() -> void:
-	if not visual_mesh or not is_instance_valid(visual_mesh):
-		visual_mesh = get_node_or_null("CSGCylinder3D")
 	if visual_mesh and is_instance_valid(visual_mesh):
 		if hit_tween and hit_tween.is_valid():
 			hit_tween.kill()

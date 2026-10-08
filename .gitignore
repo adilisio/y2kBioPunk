@@ -56,3 +56,7 @@ Thumbs.db
 desktop.ini
 ops/runs/
 .worktrees/
+
+# Secrets (API keys) and local env
+ops/secrets/
+.env

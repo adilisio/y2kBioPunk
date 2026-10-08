@@ -1,0 +1,62 @@
+{
+  "defaults": {
+    "ai_model": "meshy-7.1",
+    "topology": "triangle",
+    "should_remesh": true,
+    "target_polycount": 12000,
+    "enable_pbr": true,
+    "texture_resolution": "2k"
+  },
+  "style": "Y2K bio-punk, year-2000 consumer electronics fused with mutated insect anatomy, translucent candy-colored plastic, neon magenta and acid green accents, game-ready low-poly asset, clean silhouette, single object centered, no base, no background",
+  "assets": [
+    {
+      "name": "neon_cicada",
+      "kind": "enemy",
+      "prompt": "A mutated cicada the size of a dog, body built from a translucent iMac-style plastic shell in magenta, two large orange glowing compound eyes, four translucent wings with circuit traces, six spindly black legs, menacing, hovering pose",
+      "texture_prompt": "glossy translucent magenta plastic shell, orange emissive eyes, faint green circuit traces on the wings, grime and scratches",
+      "target_polycount": 10000
+    },
+    {
+      "name": "sludge_roach",
+      "kind": "enemy",
+      "prompt": "A mutated giant cockroach, low flattened body, segmented orange-brown chitin shell with a magenta underglow seam, head wedge with two antennae, six strong jointed legs, crouched ready-to-pounce pose, facing forward",
+      "texture_prompt": "oily orange-brown chitin, magenta emissive seams between the plates, wet sludge drips, dirt",
+      "target_polycount": 8000
+    },
+    {
+      "name": "kiosk_turret",
+      "kind": "enemy",
+      "prompt": "A derelict shopping-mall information kiosk corrupted into a turret: a beige late-1990s CRT monitor box on a pedestal, a short mortar barrel protruding from the screen, a bent radio antenna with a red light on top, cables and insect-like biomass growing out of the vents",
+      "texture_prompt": "yellowed beige plastic, a glowing green CRT screen with scanlines, rust, magenta biomass growth, exposed cables",
+      "target_polycount": 10000
+    },
+    {
+      "name": "dial_up_queen",
+      "kind": "boss",
+      "prompt": "A massive insect queen boss fused with a 56k dial-up modem: bloated magenta-violet thorax shaped like a modem chassis with blinking LED rows, two tall antenna rods, four huge translucent cyan wings with circuit patterns, a crown of phone cables, regal and threatening pose",
+      "texture_prompt": "glossy magenta-violet plastic chitin, rows of green and amber LEDs, translucent cyan wings with glowing circuit traces, grey phone cables",
+      "target_polycount": 16000
+    },
+    {
+      "name": "mall_kiosk",
+      "kind": "prop",
+      "prompt": "A derelict year-2000 shopping mall retail kiosk cart, rectangular counter with a striped canopy, shutter closed, pager and cassette posters peeling off, flood waterline stain at the base",
+      "texture_prompt": "faded teal and orange laminate, peeling posters, water stains, dust",
+      "target_polycount": 8000
+    },
+    {
+      "name": "fountain_sculpture",
+      "kind": "prop",
+      "prompt": "A shopping mall fountain centerpiece sculpture: a chrome abstract Y2K swoosh spire on a round pedestal, with insect egg sacs clustered around the base",
+      "texture_prompt": "tarnished chrome, teal patina, translucent green egg sacs with faint glow",
+      "target_polycount": 8000
+    },
+    {
+      "name": "mall_planter",
+      "kind": "prop",
+      "prompt": "A long rectangular shopping mall concrete planter box with dead ferns and a mutated glowing fungus growing out of it, low wall height",
+      "texture_prompt": "stained concrete, dry brown fern leaves, acid green bioluminescent fungus",
+      "target_polycount": 6000
+    }
+  ]
+}

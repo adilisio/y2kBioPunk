@@ -39,7 +39,8 @@ Intro video → menu → New Game. The player spawns in the flooded mall atrium 
 - Presentation pass: tiled floor, wall trims, pillar caps, neon signage, dressed boss arena, checkpoint terminal, menu background, HUD fixes, softer tints, turret screen, water, shadow quality.
 - Gameplay critic fixes: no silent progress loss, safe victory window, truthful and complete pager, telegraph colour semantics, Queen phase-3 timing and summon warning, disk/slam/cicada tuning, turrets idle during the boss, roach knockback.
 - Effect warm-up before the first fight; performance re-measured at ~120 fps uncapped / stable 60 capped on the target laptop.
-- 23 headless suites (VS1's 19 plus occlusion, character sheet, tuning, warm-up).
+- Owner-feedback round after Anthony's playtest: turret identity (beacon, hazard ring, scan), a Queen that drifts, bobs and rises, scuttling roaches and fluttering cicadas, a bat in the player's hand, stats that explain themselves (VIBE = crit chance), sane leveling pace, and the Queen-summon stall fixed.
+- 25 headless suites (VS1's 19 plus occlusion, character sheet, tuning, warm-up, identity, stats).
 
 ### Verification limits
 Headless suites verify scripted behaviour and material/node state; presentation was accepted from in-engine screenshots and two independent critiques; audio was accepted by the owner's VS1 playtest. The owner's VS1.1 playtest (see the ledger checklist) is the remaining gate.
@@ -69,4 +70,4 @@ Headless suites verify scripted behaviour and material/node state; presentation 
 - **Post-VS1.1 polish** (not blockers): Queen HP / fight length, rails that connect areas, victory card art and key-press dismissal, Continue after victory, action-bar label size, floor material detail, stronger light pools.
 - **Phase 2 ideas (deferred by Director ruling):** tape splicing, new enemies/weapons/biomes, controller support, NPC dialogue, save slots, kill persistence.
 
-*Updated October 8, 2026. Reflects Vertical Slice 1.1 as merged on `main` (23/23 headless suites, packaged build validated).*
+*Updated October 8, 2026. Reflects Vertical Slice 1.1 as merged on `main` (25/25 headless suites, packaged build validated).*

@@ -46,6 +46,7 @@ The game uses a **hybrid C++ GDExtension + GDScript architecture** designed for 
   - Melee attack registration via `AttackSensor` (`Area3D`, 2.2m radius).
   - Secondary weapon arsenal: Aerosol Flamethrower (continuous tick + particles) and Disk Launcher.
   - Walkman Cassette tape engine modifying real-time effective stats (STR, AGI, VIT, VIBE).
+  - Stat formulas: strike damage 15 + 4·STR; walk (base + 2.7)·1.03^(AGI−18), skate 12·1.03^(AGI−18); max HP 100 + 12·(VIT−10); crit chance 2 %·VIBE (×1.75, +40 ms hit-stop, `crit_pop` SFX). A bat mesh is attached to the `mixamorig:RightHand` bone at `_ready` (`attach_hand_bat`).
 - **`IntroController` & `MenuController`**: Scene flow and menu transitions.
 - **`register_types.cpp`**: GDExtension initialization symbol `biopunk_library_init`.
 
@@ -167,7 +168,7 @@ powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1    # finds Godo
 
 The runner discovers `test_*.gd` and `verify_*.gd`, checks exit codes, script errors and failed results, enforces a timeout, and stores logs in `ops/runs/tests/`. `_test_util.gd` provides assertions, cleanup and isolated saves. Passing does not imply warning-free rendering or an audio playtest.
 
-Current tests (23): `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_character_sheet`, `test_critical_path`, `test_cursor_aiming`, `test_effect_warmup`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_menu_flow`, `test_occlusion`, `test_onboarding`, `test_presentation`, `test_slice_e2e`, `test_systems`, `test_tapes`, `test_tune`, and `verify_camera_and_hud` (all `.gd`). Suites share the `user://` save: never run them from two checkouts at once.
+Current tests (25): `test_3d_player`, `test_5_systems`, `test_candy_pickup`, `test_character_sheet`, `test_critical_path`, `test_cursor_aiming`, `test_effect_warmup`, `test_encounters`, `test_feel_combat`, `test_feel_movement`, `test_feel_traversal`, `test_flamethrower_particles`, `test_gameplay_fixes`, `test_grinding`, `test_identity`, `test_menu_flow`, `test_occlusion`, `test_onboarding`, `test_presentation`, `test_slice_e2e`, `test_stats`, `test_systems`, `test_tapes`, `test_tune`, and `verify_camera_and_hud` (all `.gd`). Suites share the `user://` save: never run them from two checkouts at once.
 
 Release packaging: `powershell -NoProfile -ExecutionPolicy Bypass -File ops/tools/build_release.ps1` (rebuilds the release DLL when `src/` is newer, imports, exports both presets, writes `build/release/BUILD-INFO.txt`, zips to `build/Y2K-BioPunk-VS1.1-win64.zip`) then `ops/tools/smoke_packaged.ps1` (pck content proof, e2e + menu tests inside the QA pack, off-screen release launch). Needs the Godot 4.3 export templates in `%APPDATA%\Godot\export_templates\4.3.stable\`.
 
@@ -202,7 +203,8 @@ Release packaging: `powershell -NoProfile -ExecutionPolicy Bypass -File ops/tool
   ```
 - **Native player damage**: `take_damage(float amount, const Vector3 &knockback = Vector3())` is bound with an optional second argument.
 - **Direction contract**: Pass a normalized direction (or zero), not a velocity in m/s. Receivers apply their own impulse; cicada/roach normalize supplied directions and clamp magnitude scaling. Combo hits can deliberately scale the direction.
-- **XP Dispersal**: Each enemy guards death and calls `player.gain_xp(xp_amount)` exactly once; repeated lethal hits must not duplicate rewards.
+- **XP Dispersal**: Each enemy guards death and calls `player.gain_xp(xp_amount)` exactly once; repeated lethal hits must not duplicate rewards. Enemies with meta `summoned_by_boss` award 0 XP; the Queen awards 120.
+- **Model loading**: use `EnemyModel.attach` / `EnemyModel.packed_scene`; it keeps GLB scenes cached so respawns and summons never re-read the 20 MB `.scn` files.
 - **Player signals**: Bindings in `player_controller.cpp` expose hurt/health, attack, stats, tape/skates, XP/level/stat spending, adrenaline, grind start/end/slam, evade start/end, secondary fire/switch, and `player_died`.
 
 ### Session, Level and Boss Contracts

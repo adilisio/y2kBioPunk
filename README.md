@@ -6,7 +6,7 @@ Windows x86_64 is the supported platform. The extension manifest has no Linux li
 
 ## Vertical Slice 1.1 (showable build)
 
-Start a fresh run in the Flooded Mall, fight telegraphed cicada lunges, roach pounces and kiosk mortars, earn XP and spend stat points in a character sheet that pauses the game. Skate, hop onto grind rails with SPACE and land a dismount slam; the Bio-Stabilizer terminal heals and saves, and entering the north arena also saves before the three-phase Dial-Up Queen (1500 HP) wakes in her neon server pit. Victory shows a completion card and returns to the menu, where Continue restores the checkpoint.
+Start a fresh run in the Flooded Mall, fight telegraphed cicada lunges, roach pounces and beacon-topped kiosk turrets with a baseball bat, earn XP and spend stat points in a character sheet that pauses the game and tells you what each stat does (Strength = strike damage, Agility = speed, Vitality = max HP, Vibe = critical hits). Skate, hop onto grind rails with SPACE and land a dismount slam; the Bio-Stabilizer terminal heals and saves, and entering the north arena also saves before the three-phase Dial-Up Queen (1500 HP) wakes in her neon server pit. Victory shows a completion card and returns to the menu, where Continue restores the checkpoint.
 
 The pager teaches movement, evade, tapes, skates, secondary weapons, grinding and turret reading as each becomes relevant. Pillars, walls and kiosks fade when they hide the player. Music and SFX run on separate buses; tapes resume where they left off and crossfade when switched.
 
@@ -61,7 +61,7 @@ Preserve SConstruct's `/MT` enforcement to match the bindings' static release ru
 powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1
 ```
 
-The runner discovers the 23 headless suites in `tests/`, checks failures and exit codes, and saves output in `ops/runs/tests/`. Run one with `./Godot_v4.3-stable_win64.exe --headless --path . -s tests/test_slice_e2e.gd`. Do not run suites from two checkouts at the same time (they share the `user://` save). A passing suite verifies scripted behaviour, not a visual/audio playtest.
+The runner discovers the 25 headless suites in `tests/`, checks failures and exit codes, and saves output in `ops/runs/tests/`. Run one with `./Godot_v4.3-stable_win64.exe --headless --path . -s tests/test_slice_e2e.gd`. Do not run suites from two checkouts at the same time (they share the `user://` save). A passing suite verifies scripted behaviour, not a visual/audio playtest.
 
 ## Release build
 

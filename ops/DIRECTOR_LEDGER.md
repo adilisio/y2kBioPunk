@@ -3,16 +3,16 @@
 Live project-state and handoff document. Directors: Fable 5.1 sessions, 2026-10-07 (VS1) and 2026-10-08 13:00 → 15:00 (VS1.1).
 Another strong agent can resume directorship from this file plus `ops/CONTEXT.md`.
 Reports: `ops/reports/` (audits, `WP-*` for VS1, `VS11-*` for VS1.1, `CRITIC-*` for the independent critiques). Briefs: `ops/briefs/`.
-Gate: `powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1` (23 suites, all PASS at HEAD).
+Gate: `powershell -ExecutionPolicy Bypass -File ops/tools/run_tests.ps1` (25 suites, all PASS at HEAD).
 
-## VS1.1 — Showable build (status: accepted by the owner 2026-10-08; owner-feedback round in progress)
+## VS1.1 — Showable build (status: accepted by the owner 2026-10-08; owner-feedback round merged, package rebuilt)
 
 Milestone artifact: `build/Y2K-BioPunk-VS1.1-win64.zip` (244 MB) produced by `ops/tools/build_release.ps1` from main at `38f59ba`+docs; contents `build/release/` = `Y2K-BioPunk.exe` (84 MB release template), `Y2K-BioPunk.pck` (224 MB, 100 entries, no ops/tests/src/godot-cpp files), `libbiopunk.windows.template_release.x86_64.dll`, `Y2K-BioPunk.console.exe` (log-capturing launcher), `BUILD-INFO.txt`, `MUSIC-CREDITS.txt`. A second preset builds `build/qa/` (debug template, includes `tests/` and the shot harness) for packaged verification. Saves land in `%APPDATA%\Godot\app_userdata\Y2K- Bio-Punk\`.
 
 ### Definition of done (status at HEAD)
 | # | Criterion | Status / evidence |
 |---|---|---|
-| 1 | All required tests pass | **23/23** (`ops/runs/tests/` latest log; VS1's 19 plus `test_occlusion`, `test_character_sheet`, `test_tune`, `test_effect_warmup`) |
+| 1 | All required tests pass | **25/25** (`ops/runs/tests/` latest log; VS1's 19 plus `test_occlusion`, `test_character_sheet`, `test_tune`, `test_effect_warmup`, `test_identity`, `test_stats`) |
 | 2 | C++ release target builds | `scons target=template_release` clean; release DLL committed in `bin/` |
 | 3 | Standalone Windows build produced | zip above; `build_release.ps1` exit 0 |
 | 4 | Launches without the editor | `smoke_packaged.ps1`: release exe 600 frames off-screen, zero error lines; intro video → menu verified in `ops/runs/pkg_release_launch2.log` |
@@ -75,6 +75,14 @@ VS1.1 added ~0.4 ms GPU over the VS1 baseline (7.3 ms). Lessons that still hold:
 7. (covered by 5)
 8. **"I would give it off to a stranger to play."** → VS1.1 accepted.
 Additional ruling: **stats are not legible.** "Bat swing dmg" but the character punches; "what are vibes? no one knows"; leveling doesn't feel stronger; "you can easily gain 5+ levels just in this fight" (summons farm XP). → Follow-up packets VS11-STATS (bat prop in hand, per-point effects ×1.6, VIBE = crit chance, sheet explains each stat, summons give 0 XP, Queen 120 XP, "STRIKE DMG") and VS11-IDENTITY (turret beacon/hazard ring/bigger screen/idle scan, Queen figure-8 drift + bob + charge rise + summon spin, roach scuttle and cicada flutter).
+
+### Owner-feedback round (2026-10-08 15:15 → 16:00, merged on main)
+| Packet | Agent | Result |
+|---|---|---|
+| Summon stall | Director | `EnemyModel.attach` now keeps loaded GLB `PackedScene`s in a static cache; the Queen summon no longer re-reads the 21 MB roach scene (560 ms → worst frame 12.5 ms in a 20 s phase-2 fight). Summon tone added to the warm-up; warm-up coroutine guarded against the scene being freed mid-run (intermittent menu-flow script error under load). |
+| VS11-IDENTITY | Codex high | Turret: rotating red beacon light, yellow hazard ring, 50 % larger screen on the state ramp, idle ±35° scan. Queen: figure-8 drift (2.5 m, ~7 s), bob 0.35 m, roll sway, rise on screech charge + squash on blast, spin on summon/phase change; all gameplay numbers unchanged (asserted in `test_identity`). Roach scuttle bob/wobble, cicada wing flutter. GPU +0.4 ms, draw calls +14. |
+| VS11-STATS | Codex high (quota ran out before its commit; Director verified and committed) | A wooden bat with grip and cyan tape on the `mixamorig:RightHand` bone, carried by every animation; "STRIKE DMG" wording; per-point effects STR +4 dmg, AGI +3 % speed (anchored at the shipped 8.7 / 12 m/s), VIT +12 HP; VIBE = crit chance 2 %/pt, ×1.75, +40 ms hit-stop and a pop; the sheet explains each stat with live numbers and per-point gains; summoned minions give 0 XP, Queen 120 XP → level 3 before the arena, level 4 after the Queen (was 5+). `test_stats`. |
+Tests: 25 suites (23 + `test_identity`, `test_stats`). Package rebuilt from this state; see the performance table below for the re-measure.
 
 ## VS1 history (2026-10-07, condensed)
 Experience and DoD: New Game → flooded mall → telegraphed cicadas/roaches/turrets → XP/levels/character sheet → Bio-Stabilizer → death/respawn with progression → skate/rail/slam → three-phase Dial-Up Queen → victory card → menu → Continue. Packets WP-1..8 (audits by Codex/Gemini/Opus; critical path, feel core, presentation, encounters, test harness, onboarding/audio, e2e + balance, docs) all merged; details in `ops/reports/WP-*.md`.

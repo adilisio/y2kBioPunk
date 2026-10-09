@@ -1,5 +1,7 @@
 # Y2K: Bio-Punk ARPG
 
+**[Download the free Windows demo on itch.io](https://signallampgames.itch.io/y2k-bio-punk)** (about 15 minutes, one complete run to the Dial-Up Queen).
+
 A retro-future isometric action RPG built in Godot 4.3 Stable (Forward+) with a C++ godot-cpp GDExtension and GDScript gameplay systems. Roller skates, cassette stat buffs and a CRT pager meet a flooded mall full of mutated bio-fauna.
 
 Windows x86_64 is the supported platform. The extension manifest has no Linux library entry.
